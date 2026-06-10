@@ -1,189 +1,377 @@
 """
 知识检索模块
 
-本节实现：TF-IDF + 余弦相似度的基础检索
-后续课程：BM25 → 稠密向量检索（Sentence-BERT） → 混合检索
+支持多种检索方法：
+- TF-IDF: 基于词频-逆文档频率的稀疏检索
+- BM25: 概率检索模型，对 TF-IDF 的改进
+- Hybrid: TF-IDF / BM25 混合（预留向量检索接口）
 
-知识点：TF-IDF 原理、余弦相似度、向量空间模型
+流程：问题表示 → 候选召回 → 相关性排序 → 输出候选段落
 """
 
 import json
+import math
 import pickle
-from pathlib import Path
-from typing import List, Tuple, Optional
-
-import jieba
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from typing import List, Dict, Optional, Tuple
+from collections import Counter
 
+from utils.tokenizer import ChineseTokenizer
+
+
+# ══════════════════════════════════════════════════════════════════════
+# TF-IDF 检索器
+# ══════════════════════════════════════════════════════════════════════
 
 class TfidfRetriever:
-    """
-    TF-IDF 检索器
-
-    核心思想：
-    - TF (词频)：词语在文档中出现的频率
-    - IDF (逆文档频率)：词语在多少个文档中出现，出现越少越重要
-    - TF-IDF = TF × IDF，值越大表示该词对文档越重要
-
-    检索流程：
-        1. 对所有 FAQ 问题计算 TF-IDF 向量
-        2. 对用户输入的问题同样计算 TF-IDF 向量
-        3. 计算余弦相似度，返回 Top-K 最相似的问题及其答案
-    """
+    """基于 TF-IDF + 余弦相似度的检索器"""
 
     def __init__(self, config: dict = None):
         self.config = config or {}
-        self.vectorizer: Optional[TfidfVectorizer] = None
-        self.tfidf_matrix: Optional[np.ndarray] = None
+        self.tokenizer = ChineseTokenizer(method="jieba")
+
+        # TF-IDF 参数
+        self.max_features = config.get("tfidf", {}).get("max_features", 5000)
+        self.ngram_range = tuple(config.get("tfidf", {}).get("ngram_range", [1, 2]))
+        self.use_idf = config.get("tfidf", {}).get("use_idf", True)
+
+        # 数据
         self.questions: List[str] = []
         self.answers: List[str] = []
+        self.corpus: List[str] = []  # 分词后的文档
+        self.vocab: Dict[str, int] = {}
+        self.idf: Dict[str, float] = {}
+        self.tfidf_matrix: np.ndarray = None  # [n_docs, n_terms]
 
-    def _tokenize_chinese(self, text: str) -> str:
-        """
-        中文分词预处理
+    # ── 索引构建 ──────────────────────────────────────────────────────
 
-        TF-IDF 对英文是按空格分词的，所以中文需要先分词再用空格连接。
-        这一步叫"分词 + 空格连接"，是中文 TF-IDF 的标准做法。
-        """
-        words = jieba.cut(text, cut_all=False)
-        return " ".join(words)
+    def _tokenize(self, text: str) -> List[str]:
+        """分词并生成 n-gram"""
+        tokens = list(self.tokenizer.tokenize(text))
+
+        # 添加 n-gram
+        ngrams = []
+        n_min, n_max = self.ngram_range
+        for n in range(n_min, n_max + 1):
+            for i in range(len(tokens) - n + 1):
+                ngrams.append("".join(tokens[i:i + n]))
+
+        return tokens + ngrams
+
+    def _build_vocab(self):
+        """从语料构建词表"""
+        counter = Counter()
+        for doc in self.corpus:
+            counter.update(doc)
+
+        # 按频率排序，取 top-k
+        most_common = counter.most_common(self.max_features)
+        self.vocab = {word: idx for idx, (word, _) in enumerate(most_common)}
+
+    def _compute_idf(self):
+        """计算 IDF"""
+        n_docs = len(self.corpus)
+        doc_freq = Counter()
+
+        for doc in self.corpus:
+            for word in set(doc):
+                if word in self.vocab:
+                    doc_freq[word] += 1
+
+        self.idf = {}
+        for word, df in doc_freq.items():
+            self.idf[word] = math.log((n_docs + 1) / (df + 1)) + 1
+
+    def _vectorize(self, tokens: List[str]) -> np.ndarray:
+        """将分词结果转为 TF-IDF 向量"""
+        vec = np.zeros(len(self.vocab))
+
+        if not tokens:
+            return vec
+
+        # 计算 TF
+        tf = Counter(tokens)
+        max_tf = max(tf.values())
+
+        for word, count in tf.items():
+            if word in self.vocab:
+                idx = self.vocab[word]
+                # TF: 归一化后的词频
+                tf_value = 0.5 + 0.5 * count / max_tf
+                # IDF
+                idf_value = self.idf.get(word, 1.0) if self.use_idf else 1.0
+                vec[idx] = tf_value * idf_value
+
+        # L2 归一化
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+
+        return vec
 
     def build_index(self, questions: List[str], answers: List[str]):
-        """
-        构建 TF-IDF 索引
-
-        流程：
-            1. 保存问答数据
-            2. 中文分词
-            3. 训练 TF-IDF 向量化器
-            4. 计算所有问题的 TF-IDF 向量矩阵
-        """
+        """构建 TF-IDF 索引"""
         self.questions = questions
         self.answers = answers
 
-        # 中文分词（TF-IDF 要求输入是空格分隔的 token 序列）
-        print(f"[1/3] 中文分词 ({len(questions)} 条问题)...")
-        tokenized = [self._tokenize_chinese(q) for q in questions]
+        # 分词
+        print("[索引] 正在分词...")
+        self.corpus = [self._tokenize(q) for q in questions]
+        print(f"[索引] 分词完成，{len(self.corpus)} 篇文档")
 
-        # 创建 TF-IDF 向量化器
-        print("[2/3] 训练 TF-IDF 向量化器...")
-        tfidf_config = self.config.get("tfidf", {})
-        self.vectorizer = TfidfVectorizer(
-            max_features=tfidf_config.get("max_features", 5000),
-            ngram_range=tuple(tfidf_config.get("ngram_range", [1, 2])),
-            use_idf=tfidf_config.get("use_idf", True),
-            token_pattern=r"(?u)\S+",   # 匹配所有非空 token（中文已分词）
-        )
-        self.tfidf_matrix = self.vectorizer.fit_transform(tokenized)
+        # 构建词表
+        self._build_vocab()
+        print(f"[索引] 词表大小: {len(self.vocab)}")
 
-        # 打印信息
-        print(f"[3/3] 索引构建完成!")
-        print(f"      词典大小: {self.vectorizer.get_feature_names_out().shape[0]}")
-        print(f"      矩阵形状: {self.tfidf_matrix.shape}")
-        print(f"      问题总数: {len(questions)}")
+        # 计算 IDF
+        self._compute_idf()
 
-    def retrieve(
-        self, query: str, top_k: int = 3
-    ) -> List[Tuple[str, str, float]]:
+        # 构建 TF-IDF 矩阵
+        print("[索引] 正在计算 TF-IDF 矩阵...")
+        matrix = []
+        for doc in self.corpus:
+            matrix.append(self._vectorize(doc))
+        self.tfidf_matrix = np.array(matrix)
+        print(f"[索引] TF-IDF 矩阵形状: {self.tfidf_matrix.shape}")
+
+    # ── 检索 ──────────────────────────────────────────────────────────
+
+    def retrieve(self, query: str, top_k: int = 3) -> List[Dict]:
         """
-        检索与查询最相似的 FAQ
+        检索最相关的问答对。
 
-        参数:
-            query: 用户问题
-            top_k: 返回前 K 个结果
-
-        返回:
-            [(问题, 答案, 相似度), ...] 按相似度从高到低排列
-
-        原理：
-            1. 将用户问题转为 TF-IDF 向量
-            2. 计算与所有 FAQ 问题的余弦相似度
-            3. 余弦相似度 = cos(θ) = A·B / (|A|×|B|)
-               - 值域 [-1, 1]，值越大表示两个向量方向越一致
-               - 在 TF-IDF 空间中 = 语义越相似
+        Returns:
+            [{"question": str, "answer": str, "score": float}, ...]
         """
-        if self.vectorizer is None or self.tfidf_matrix is None:
-            raise RuntimeError("请先调用 build_index() 构建索引")
+        if self.tfidf_matrix is None or len(self.questions) == 0:
+            return []
 
-        # 对查询分词并向量化
-        query_vec = self.vectorizer.transform([self._tokenize_chinese(query)])
+        # 向量化查询
+        query_tokens = self._tokenize(query)
+        query_vec = self._vectorize(query_tokens)
 
-        # 计算与所有文档的余弦相似度
-        # cosine_similarity 返回形状为 (1, n_docs) 的矩阵
-        scores = cosine_similarity(query_vec, self.tfidf_matrix)[0]
+        # 计算余弦相似度
+        similarities = self.tfidf_matrix @ query_vec
 
-        # 获取 Top-K 索引（按相似度降序）
-        top_indices = np.argsort(scores)[::-1][:top_k]
+        # 获取 top-k 索引
+        top_indices = np.argsort(similarities)[::-1][:top_k]
 
-        # 组装结果
         results = []
         for idx in top_indices:
-            if scores[idx] > 0:  # 只返回有相关性的结果
-                results.append((self.questions[idx], self.answers[idx], float(scores[idx])))
+            score = float(similarities[idx])
+            results.append({
+                "question": self.questions[idx],
+                "answer": self.answers[idx],
+                "score": round(score, 4),
+            })
 
         return results
 
+    # ── 持久化 ────────────────────────────────────────────────────────
+
     def save(self, path: str):
         """保存检索器到磁盘"""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "questions": self.questions,
+            "answers": self.answers,
+            "vocab": self.vocab,
+            "idf": self.idf,
+            "tfidf_matrix": self.tfidf_matrix,
+            "config": self.config,
+        }
         with open(path, "wb") as f:
-            pickle.dump({
-                "vectorizer": self.vectorizer,
-                "tfidf_matrix": self.tfidf_matrix,
-                "questions": self.questions,
-                "answers": self.answers,
-            }, f)
-        print(f"检索器已保存到: {path}")
+            pickle.dump(data, f)
+        print(f"[检索器] 已保存到 {path}")
 
     def load(self, path: str):
         """从磁盘加载检索器"""
         with open(path, "rb") as f:
             data = pickle.load(f)
-        self.vectorizer = data["vectorizer"]
-        self.tfidf_matrix = data["tfidf_matrix"]
         self.questions = data["questions"]
         self.answers = data["answers"]
-        print(f"检索器已从 {path} 加载")
-        print(f"      问题数: {len(self.questions)}, 词典大小: {self.vectorizer.get_feature_names_out().shape[0]}")
+        self.vocab = data["vocab"]
+        self.idf = data["idf"]
+        self.tfidf_matrix = data["tfidf_matrix"]
+        self.config = data.get("config", {})
+        print(f"[检索器] 已从 {path} 加载 ({len(self.questions)} 条)")
 
 
-def test_retriever():
-    """测试检索器的基本功能"""
-    # 准备简单的测试数据
-    questions = [
-        "什么是人工智能",
-        "什么是机器学习",
-        "Python 是什么",
-        "什么是深度学习",
-    ]
-    answers = [
-        "人工智能是计算机科学的分支",
-        "机器学习是 AI 的子领域",
-        "Python 是编程语言",
-        "深度学习是机器学习的子集",
-    ]
+# ══════════════════════════════════════════════════════════════════════
+# BM25 检索器
+# ══════════════════════════════════════════════════════════════════════
 
-    # 构建索引
-    retriever = TfidfRetriever()
-    retriever.build_index(questions, answers)
+class Bm25Retriever:
+    """BM25 概率检索模型"""
 
-    # 测试检索
-    test_queries = [
-        "AI 是什么",
-        "Python 编程语言",
-        "什么是机器学习算法",
-    ]
+    def __init__(self, config: dict = None):
+        self.config = config or {}
+        self.tokenizer = ChineseTokenizer(method="jieba")
+        self.k1 = config.get("bm25", {}).get("k1", 1.5)
+        self.b = config.get("bm25", {}).get("b", 0.75)
 
-    print("\n=== 检索测试 ===")
-    for query in test_queries:
-        print(f"\n用户问题: {query}")
-        results = retriever.retrieve(query, top_k=2)
-        for q, a, score in results:
-            print(f"  [{score:.4f}] {q} → {a}")
+        self.questions: List[str] = []
+        self.answers: List[str] = []
+        self.corpus: List[List[str]] = []
+        self.avg_doc_len: float = 0.0
+        self.doc_lens: List[int] = []
+        self.n_docs: int = 0
+        self.df: Dict[str, int] = {}  # 文档频率
+
+    def build_index(self, questions: List[str], answers: List[str]):
+        self.questions = questions
+        self.answers = answers
+
+        print("[BM25] 正在分词...")
+        self.corpus = [self.tokenizer.tokenize(q) for q in questions]
+        self.n_docs = len(self.corpus)
+        self.doc_lens = [len(doc) for doc in self.corpus]
+        self.avg_doc_len = sum(self.doc_lens) / max(self.n_docs, 1)
+
+        # 计算文档频率
+        print("[BM25] 计算文档频率...")
+        self.df = {}
+        for doc in self.corpus:
+            for word in set(doc):
+                self.df[word] = self.df.get(word, 0) + 1
+
+        print(f"[BM25] 索引完成，{self.n_docs} 篇文档，平均长度 {self.avg_doc_len:.1f}")
+
+    def retrieve(self, query: str, top_k: int = 3) -> List[Dict]:
+        """BM25 检索"""
+        if self.n_docs == 0:
+            return []
+
+        query_tokens = self.tokenizer.tokenize(query)
+        scores = np.zeros(self.n_docs)
+
+        for token in query_tokens:
+            if token not in self.df:
+                continue
+
+            df = self.df[token]
+            idf = math.log((self.n_docs - df + 0.5) / (df + 0.5) + 1.0)
+
+            for i, doc in enumerate(self.corpus):
+                # 词频
+                tf = doc.count(token)
+                if tf == 0:
+                    continue
+
+                doc_len = self.doc_lens[i]
+                score = idf * (tf * (self.k1 + 1)) / (
+                    tf + self.k1 * (1 - self.b + self.b * doc_len / self.avg_doc_len)
+                )
+                scores[i] += score
+
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        results = []
+        for idx in top_indices:
+            if scores[idx] > 0:
+                results.append({
+                    "question": self.questions[idx],
+                    "answer": self.answers[idx],
+                    "score": round(float(scores[idx]), 4),
+                })
+        return results
+
+    def save(self, path: str):
+        data = {
+            "questions": self.questions,
+            "answers": self.answers,
+            "df": self.df,
+            "doc_lens": self.doc_lens,
+            "avg_doc_len": self.avg_doc_len,
+            "n_docs": self.n_docs,
+            "config": self.config,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(data, f)
+
+    def load(self, path: str):
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+        self.questions = data["questions"]
+        self.answers = data["answers"]
+        self.df = data["df"]
+        self.doc_lens = data["doc_lens"]
+        self.avg_doc_len = data["avg_doc_len"]
+        self.n_docs = data["n_docs"]
+        self.config = data.get("config", {})
 
 
-if __name__ == "__main__":
-    test_retriever()
+# ══════════════════════════════════════════════════════════════════════
+# 混合检索器
+# ══════════════════════════════════════════════════════════════════════
+
+class HybridRetriever:
+    """混合检索：结合 TF-IDF 和 BM25 结果"""
+
+    def __init__(self, tfidf_retriever: TfidfRetriever, bm25_retriever: Bm25Retriever,
+                 weights: Tuple[float, float] = (0.5, 0.5)):
+        self.tfidf = tfidf_retriever
+        self.bm25 = bm25_retriever
+        self.weights = weights
+
+    def build_index(self, questions: List[str], answers: List[str]):
+        self.tfidf.build_index(questions, answers)
+        self.bm25.build_index(questions, answers)
+
+    def retrieve(self, query: str, top_k: int = 3) -> List[Dict]:
+        tfidf_results = self.tfidf.retrieve(query, top_k * 2)
+        bm25_results = self.bm25.retrieve(query, top_k * 2)
+
+        # 合并分数
+        merged = {}
+        w1, w2 = self.weights
+        for r in tfidf_results:
+            idx = self._get_index(r["question"])
+            merged[idx] = {"score": w1 * r["score"], "count": 1}
+        for r in bm25_results:
+            idx = self._get_index(r["question"])
+            if idx in merged:
+                merged[idx]["score"] += w2 * r["score"]
+                merged[idx]["count"] += 1
+            else:
+                merged[idx] = {"score": w2 * r["score"], "count": 1}
+
+        # 按分数排序
+        sorted_items = sorted(merged.items(), key=lambda x: -x[1]["score"])
+        all_questions = self.tfidf.questions
+        all_answers = self.tfidf.answers
+
+        results = []
+        for idx, info in sorted_items[:top_k]:
+            results.append({
+                "question": all_questions[idx],
+                "answer": all_answers[idx],
+                "score": round(info["score"], 4),
+            })
+        return results
+
+    def _get_index(self, question: str) -> int:
+        try:
+            return self.tfidf.questions.index(question)
+        except ValueError:
+            return -1
+
+    def save(self, path: str):
+        self.tfidf.save(path + ".tfidf")
+        self.bm25.save(path + ".bm25")
+
+    def load(self, path: str):
+        self.tfidf.load(path + ".tfidf")
+        self.bm25.load(path + ".bm25")
+
+
+# ── 工厂函数 ────────────────────────────────────────────────────────────
+
+def create_retriever(method: str = "tfidf", config: dict = None):
+    """创建检索器实例"""
+    if method == "bm25":
+        return Bm25Retriever(config)
+    elif method == "hybrid":
+        tfidf = TfidfRetriever(config)
+        bm25 = Bm25Retriever(config)
+        return HybridRetriever(tfidf, bm25)
+    else:
+        return TfidfRetriever(config)

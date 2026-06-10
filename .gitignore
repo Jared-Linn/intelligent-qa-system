@@ -1,29 +1,31 @@
 # Python
 __pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
+*.pyc
+*.pyo
+*.pkl
+*.npz
+*.pt
+*.pth
 
-# Virtual environment
-venv/
+# 数据
+data/processed/*
+
+# 模型
+checkpoints/*
+
+# 日志
+logs/*
+!logs/.gitkeep
+
+# 环境
+.env
 .venv/
-env/
+conda_env/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Project specific
-checkpoints/
-logs/
-data/processed/
-*.pt
-*.pth
-*.bin
-
-# OS
-.DS_Store
+# 系统
 Thumbs.db
+.DS_Store

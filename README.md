@@ -1,10 +1,8 @@
-# Intelligent QA System · 智能问答系统
+# 智能问答系统
 
-> 面向中文场景的智能问答系统 —— 问题理解 → 知识检索 → 答案生成 → 结果验证
+> 面向中文场景的智能问答系统 —— 问题理解 → 知识检索 → 答案生成
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-orange)](https://pytorch.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
@@ -13,57 +11,72 @@
 ```
 用户输入 → 问题理解 → 知识检索 → 答案生成 → 最终答案
                 ↑           ↑           ↑
-          问题分类    结构化检索    答案抽取
-          关键词提取  非结构化检索  答案验证
-```
-
-### 核心模块
-
-| 模块 | 功能 |
-|------|------|
-| **语料预处理** | 读取语料、分词、构建词典、拆分问答对 |
-| **问题理解** | 问题分类、关键词/实体提取 |
-| **知识检索** | 结构化检索 (SQL/知识图谱) + 非结构化检索 (BM25/向量) |
-| **答案生成** | 答案抽取 (阅读理解) + 答案生成 (seq2seq/RAG) + 答案验证 |
-| **模型训练** | 支持 BERT 微调、LoRA 等方案 |
-| **模型评价** | Exact Match、F1、BLEU、ROUGE 等指标 |
-
-### 项目结构
-
-```
-├── configs/          # 配置文件
-├── data/             # 数据与数据加载器
-├── models/           # 模型定义 (encoder, qa, retrieval, lora)
-├── modules/          # 功能模块 (preprocess, qa, retrieval)
-├── train.py          # 训练脚本
-├── test.py           # 测试脚本
-├── evaluate.py       # 评价脚本
-└── predict.py        # 推理脚本
+          问题分类       TF-IDF/BM25   答案抽取
+          关键词提取     语义检索(Q3)   答案验证
 ```
 
 ## 快速开始
 
 ```bash
-# 1. 语料预处理
-python modules/preprocess.py --input data/raw/corpus.json --output data/processed/
+# 激活环境（conda nlp）
+conda activate nlp
 
-# 2. 训练模型
-python train.py --config configs/train.yaml
+# FAQ 交互模式
+python predict.py -m faq
 
-# 3. 推理
-python predict.py --question "什么是机器学习？" --model checkpoints/best.pt
+# 单次查询
+python predict.py -q "什么是机器学习"
+
+# 对话模式
+python predict.py -m dialogue
 ```
+
+## 项目结构
+
+```
+├── configs/          # 配置文件
+├── data/             # 数据与数据加载器
+│   ├── raw/          # 原始语料（FAQ + 对话）
+│   └── dataloader.py # PyTorch DataLoader
+├── models/           # 模型定义
+│   ├── encoder.py    # 文本编码器（BERT/自建）
+│   ├── qa_model.py   # 问答模型
+│   ├── retrieval.py  # 双编码器检索模型
+│   └── lora.py       # LoRA 适配层
+├── modules/          # 核心功能模块
+│   ├── preprocess.py           # 语料预处理
+│   ├── question_understanding.py # 问题理解（分类+关键词）
+│   ├── knowledge_retrieval.py   # 知识检索（TF-IDF/BM25）
+│   └── answer_generation.py    # 答案生成
+├── utils/            # 工具类（配置/指标/分词）
+├── predict.py        # 推理入口
+├── train.py          # 训练入口
+├── test.py           # 测试入口
+├── evaluate.py       # 评价入口
+└── requirements.txt  # 依赖清单
+```
+
+## 学习路线
+
+| 课程 | 内容 | 状态 |
+|------|------|------|
+| 第1课 | 项目骨架 + TF-IDF 检索 | ✅ |
+| 第2课 | 问题理解模块 | ✅ |
+| 第3课 | 语义检索与向量化 (FAISS) | 📅 |
+| 第4课 | 检索增强生成 (RAG + LLM) | 📅 |
+| 第5课 | 模型评价与优化 | 📅 |
 
 ## 技术栈
 
 - **框架**: PyTorch 2.x, Transformers
-- **分词**: jieba / HuggingFace Tokenizers
-- **检索**: BM25, FAISS
-- **模型**: BERT / RoBERTa / ChatGLM / Qwen (LoRA 微调)
+- **分词**: jieba
+- **检索**: TF-IDF / BM25
+- **模型**: BERT / RoBERTa（预留 LoRA 微调）
 
-## 项目来源
+## 数据
 
-本科课程期末项目，基于项目思维导图（[mindmap.png](mindmap.png)）设计实现。
+- `data/raw/faq_expanded.json` — 265 条 FAQ，覆盖 20+ 分类
+- `data/raw/dialogues.json` — 35 个多轮对话场景
 
 ## License
 

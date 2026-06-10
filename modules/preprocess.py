@@ -1,153 +1,145 @@
 """
 语料预处理模块
 
-功能：读取原始语料 → 分词 → 保存处理结果
-知识点：中文分词、文本清洗、JSON 操作
+功能：
+- 读取 FAQ / 对话等原始语料
+- 文本清洗与规范化
+- 分词与词表构建
+- 问答对拆分与保存
 """
 
 import json
-import re
+import csv
 from pathlib import Path
-from typing import List, Dict
-import jieba
+from typing import List, Dict, Optional
+from collections import Counter
+
+from utils.tokenizer import ChineseTokenizer, clean_text
 
 
-class TextPreprocessor:
-    """文本预处理器：清洗、分词、构建词典"""
+class Preprocessor:
+    """语料预处理器"""
 
-    def __init__(self):
-        # 正则：保留中英文、数字和基本标点
-        self.clean_pattern = re.compile(r"[^一-鿿\w\s，。！？、：；""''（）]")
+    def __init__(self, tokenizer_method: str = "jieba"):
+        self.tokenizer = ChineseTokenizer(method=tokenizer_method)
 
-    def clean_text(self, text: str) -> str:
-        """清洗文本：去除特殊符号和多余空白"""
-        text = self.clean_pattern.sub("", text)      # 去除非中英文数字的符号
-        text = re.sub(r"\s+", "", text)               # 中文分词前去除空格
-        return text.strip()
+    # ── 数据加载 ──────────────────────────────────────────────────────
 
-    def tokenize(self, text: str) -> List[str]:
-        """使用 jieba 进行中文分词"""
-        return list(jieba.cut(text, cut_all=False))   # 精确模式
+    def load_json(self, path: str) -> List[Dict]:
+        """加载 JSON 格式语料"""
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def load_csv(self, path: str, q_field="question", a_field="answer") -> List[Dict]:
+        """加载 CSV 格式语料"""
+        items = []
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                items.append({"question": row[q_field], "answer": row[a_field]})
+        return items
+
+    # ── 文本清洗 ──────────────────────────────────────────────────────
+
+    def clean_items(self, items: List[Dict]) -> List[Dict]:
+        """批量清洗问答对"""
+        cleaned = []
+        seen_questions = set()
+        for item in items:
+            q = clean_text(item.get("question", ""))
+            a = clean_text(item.get("answer", ""))
+            if not q or not a:
+                continue
+            if q in seen_questions:
+                continue  # 去重
+            seen_questions.add(q)
+            item["question"] = q
+            item["answer"] = a
+            cleaned.append(item)
+        return cleaned
+
+    # ── 词表构建 ──────────────────────────────────────────────────────
 
     def build_vocab(
-        self, texts: List[str], min_freq: int = 1, max_size: int = 5000
+        self,
+        items: List[Dict],
+        max_size: int = 10000,
+        min_freq: int = 2,
+        save_path: Optional[str] = None,
     ) -> Dict[str, int]:
-        """
-        构建词表（vocabulary）
+        """构建词表（基于分词结果）"""
+        counter = Counter()
+        for item in items:
+            for text in [item.get("question", ""), item.get("answer", "")]:
+                tokens = self.tokenizer.tokenize(text)
+                counter.update(tokens)
 
-        参数:
-            texts: 文本列表
-            min_freq: 最小词频（低于此值的词被忽略）
-            max_size: 词表最大容量
+        # 过滤低频词
+        vocab = {"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[SEP]": 3, "[MASK]": 4}
+        for word, freq in counter.most_common(max_size):
+            if freq >= min_freq:
+                vocab[word] = len(vocab)
 
-        返回:
-            {词: 索引} 的映射字典
-        """
-        # 第一步：统计词频
-        freq = {}
-        for text in texts:
-            for word in self.tokenize(text):
-                freq[word] = freq.get(word, 0) + 1
-
-        # 第二步：过滤低频词并按频率排序
-        sorted_words = sorted(
-            [(w, f) for w, f in freq.items() if f >= min_freq],
-            key=lambda x: -x[1]
-        )[:max_size]
-
-        # 第三步：构建索引映射（预留特殊标记位置）
-        vocab = {"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[SEP]": 3}
-        for i, (word, _) in enumerate(sorted_words):
-            vocab[word] = i + 4  # 从 4 开始分配
+        if save_path:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(vocab, f, ensure_ascii=False, indent=2)
+            print(f"[词表] 已保存到 {save_path} ({len(vocab)} 词)")
 
         return vocab
 
-    def process_faq_data(
-        self, input_path: str, output_dir: str, config: dict = None
-    ) -> Dict:
+    # ── 统计 ──────────────────────────────────────────────────────────
+
+    def print_stats(self, items: List[Dict]):
+        """打印数据集统计信息"""
+        n = len(items)
+        categories = {}
+        for item in items:
+            cat = item.get("category", "unknown")
+            categories[cat] = categories.get(cat, 0) + 1
+
+        print(f"[数据] 总样本数: {n}")
+        print(f"[数据] 分类分布:")
+        for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
+            print(f"       {cat}: {count}")
+
+        # 平均长度
+        q_lens = [len(item.get("question", "")) for item in items]
+        a_lens = [len(item.get("answer", "")) for item in items]
+        print(f"[数据] 问题平均长度: {sum(q_lens)/n:.1f} 字")
+        print(f"[数据] 答案平均长度: {sum(a_lens)/n:.1f} 字")
+
+    # ── 主流程 ────────────────────────────────────────────────────────
+
+    def run(
+        self,
+        input_path: str,
+        output_dir: str = "data/processed/",
+        build_vocab: bool = True,
+    ) -> List[Dict]:
         """
-        完整的 FAQ 数据预处理流程
-
-        流程:
-            1. 读取原始 JSON
-            2. 清洗问题和答案文本
-            3. 分词
-            4. 构建词表
-            5. 保存处理结果
-
-        参数:
-            input_path: 原始数据路径
-            output_dir: 输出目录
-            config: 配置参数
+        完整预处理流程：
+        1. 加载数据
+        2. 清洗
+        3. 保存处理结果
+        4. 可选构建词表
         """
-        # 1. 读取数据
-        print(f"[1/5] 读取数据: {input_path}")
-        with open(input_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        items = self.load_json(input_path)
+        print(f"[预处理] 原始数据: {len(items)} 条")
 
-        questions = [item["question"] for item in data]
-        answers = [item["answer"] for item in data]
-        print(f"      共加载 {len(questions)} 条问答对")
+        items = self.clean_items(items)
+        print(f"[预处理] 清洗后: {len(items)} 条")
 
-        # 2. 清洗文本
-        print("[2/5] 清洗文本...")
-        clean_questions = [self.clean_text(q) for q in questions]
-        clean_answers = [self.clean_text(a) for a in answers]
+        # 保存
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "faq_processed.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+        print(f"[预处理] 已保存到 {out_path}")
 
-        # 3. 分词
-        print("[3/5] 分词...")
-        tokenized_questions = [self.tokenize(q) for q in clean_questions]
+        self.print_stats(items)
 
-        # 4. 构建词表
-        print("[4/5] 构建词表...")
-        all_texts = clean_questions + clean_answers
-        vocab = self.build_vocab(all_texts)
-        print(f"      词表大小: {len(vocab)}")
+        if build_vocab:
+            self.build_vocab(items, save_path=str(out_dir / "vocab.json"))
 
-        # 5. 保存结果
-        print(f"[5/5] 保存到: {output_dir}")
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        # 保存处理后的数据
-        processed = {
-            "questions": clean_questions,
-            "answers": clean_answers,
-            "tokenized_questions": [[" ".join(t)] for t in tokenized_questions],
-            "vocab_size": len(vocab),
-            "total_pairs": len(questions),
-        }
-        output_path = output_dir / "faq_processed.json"
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(processed, f, ensure_ascii=False, indent=2)
-
-        # 保存词表
-        vocab_path = output_dir / "vocab.json"
-        with open(vocab_path, "w", encoding="utf-8") as f:
-            json.dump(vocab, f, ensure_ascii=False, indent=2)
-
-        # 打印前几条样例
-        print("\n=== 预处理样例 ===")
-        for i in range(min(3, len(questions))):
-            print(f"  问题: {questions[i]}")
-            print(f"  分词: {' | '.join(tokenized_questions[i])}")
-            print(f"  答案: {answers[i][:50]}...")
-            print()
-
-        return processed
-
-
-if __name__ == "__main__":
-    # 独立运行：预处理 FAQ 数据
-    import sys
-    # 把项目根目录加入路径
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from utils.config import Config
-
-    cfg = Config("configs/default.yaml")
-    preprocessor = TextPreprocessor()
-    result = preprocessor.process_faq_data(
-        input_path=cfg.get("data", "raw_path"),
-        output_dir=cfg.get("data", "processed_dir"),
-    )
-    print(f"预处理完成！词表大小: {result['vocab_size']}, 问答对数: {result['total_pairs']}")
+        return items

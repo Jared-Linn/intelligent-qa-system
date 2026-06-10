@@ -1,30 +1,134 @@
-# 智能问答系统 - 默认配置
+# =====================================================================
+# 智能问答系统 — 默认配置
+# =====================================================================
+# 统一管理所有模块的参数，支持命令行覆盖
 
-# 数据配置
+# ── 数据配置 ──────────────────────────────────────────────────────────
 data:
-  raw_path: "data/raw/faq.json"       # 原始语料路径
-  processed_dir: "data/processed/"     # 预处理后数据目录
-  question_field: "question"           # JSON 中问题字段名
-  answer_field: "answer"               # JSON 中答案字段名
+  # FAQ 数据路径
+  faq_path: "data/raw/faq_expanded.json"
+  # 对话数据路径
+  dialogue_path: "data/raw/dialogues.json"
+  processed_dir: "data/processed/"
+  vocab_path: "data/vocab.json"
 
-# 检索配置
+  # 字段映射
+  question_field: "question"
+  answer_field: "answer"
+  category_field: "category"
+
+# ── 问题理解配置 ──────────────────────────────────────────────────────
+question_understanding:
+  # 问题分类方法: rule | tfidf | model
+  classifier: "rule"
+
+  # 关键词提取方法: tfidf | textrank | model
+  keyword_method: "tfidf"
+  top_k_keywords: 5
+
+  # 分类标签（与数据中的 category 字段对应）
+  categories:
+    - "ai_ml"
+    - "cloud_computing"
+    - "programming"
+    - "python"
+    - "java"
+    - "javascript"
+    - "c_cpp"
+    - "go"
+    - "rust"
+    - "database"
+    - "os"
+    - "network"
+    - "security"
+    - "algorithms"
+    - "web"
+    - "software_engineering"
+    - "math"
+    - "life"
+    - "blockchain"
+    - "big_data"
+    - "emerging_tech"
+    - "computer_basics"
+
+# ── 知识检索配置 ──────────────────────────────────────────────────────
 retrieval:
-  method: "tfidf"                      # 检索方法: tfidf | bm25 | vector
-  top_k: 3                             # 返回前 K 个候选
+  # 检索方法: tfidf | bm25 | hybrid
+  method: "tfidf"
+  top_k: 3
+  min_score: 0.1
 
-# TF-IDF 配置
-tfidf:
-  max_features: 5000                   # 最大特征数
-  ngram_range: [1, 2]                  # n-gram 范围 (1,2) 表示单字和双字
-  use_idf: true                        # 是否使用 IDF
+  tfidf:
+    max_features: 5000
+    ngram_range: [1, 2]      # 1-gram + 2-gram
+    use_idf: true
 
-# 答案生成配置
+  bm25:
+    k1: 1.5                   # 词频饱和度
+    b: 0.75                   # 文档长度归一化
+
+# ── 答案生成配置 ──────────────────────────────────────────────────────
 answer:
-  method: "direct"                     # direct: 直接返回对应答案
-  min_score: 0.1                       # 最低相似度阈值，低于此值返回"未找到答案"
+  # 生成方法: direct | extractive | generative
+  method: "direct"
+  min_score: 0.1
 
-# 路径配置
+  # 生成式参数（预留）
+  generative:
+    max_length: 200
+    temperature: 0.7
+    top_p: 0.9
+    model_name: "Qwen/Qwen2-1.5B-Instruct"
+
+# ── 对话配置 ──────────────────────────────────────────────────────────
+dialogue:
+  enable: true
+  max_history: 4              # 保留最近 N 轮对话历史
+  mode: "retrieval"           # retrieval | generative
+
+# ── 训练配置 ──────────────────────────────────────────────────────────
+training:
+  batch_size: 16
+  epochs: 10
+  learning_rate: 2e-5
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  gradient_accumulation_steps: 1
+  fp16: false
+  log_steps: 10
+  eval_steps: 100
+  save_steps: 500
+  output_dir: "checkpoints/"
+
+  # 优化器与调度器
+  optimizer: "adamw"
+  scheduler: "linear"         # linear | cosine | constant
+
+# ── 模型配置 ──────────────────────────────────────────────────────────
+model:
+  # 预训练模型路径或 HuggingFace 名称
+  pretrained_name: "bert-base-chinese"
+  hidden_size: 768
+  num_attention_heads: 12
+  num_hidden_layers: 12
+  max_position_embeddings: 512
+  dropout: 0.1
+
+  # LoRA 配置
+  lora:
+    enabled: false
+    r: 8
+    alpha: 16
+    dropout: 0.05
+    target_modules: ["query", "value"]
+
+# ── 路径配置 ──────────────────────────────────────────────────────────
 paths:
   vectorizer: "data/processed/vectorizer.pkl"
   tfidf_matrix: "data/processed/tfidf_matrix.npz"
   processed_data: "data/processed/faq_processed.json"
+  faq_index: "data/processed/faq_index.pkl"
+  dialogue_index: "data/processed/dialogue_index.pkl"
+  best_model: "checkpoints/best.pt"
+  vocab: "data/vocab.json"

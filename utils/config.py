@@ -1,55 +1,51 @@
 """
-配置文件管理模块
+配置管理模块
 
-统一管理 YAML 配置的加载、合并和访问。
-支持命令行参数覆盖配置项。
+功能：
+- 加载 YAML 配置文件
+- 支持通过点号路径访问嵌套字段
+- 支持默认值回退
 """
 
 import yaml
-import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Optional
 
 
 class Config:
-    """配置类，封装了配置的加载和访问"""
+    """配置管理器，封装 YAML 配置的加载与访问"""
 
     def __init__(self, config_path: str = "configs/default.yaml"):
-        self.config: Dict[str, Any] = self._load(config_path)
+        self.config_path = Path(config_path)
+        self.config = self._load()
 
-    def _load(self, path: str) -> Dict[str, Any]:
+    def _load(self) -> dict:
         """加载 YAML 配置文件"""
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"配置文件不存在: {path}")
-        with open(path, "r", encoding="utf-8") as f:
+        if not self.config_path.exists():
+            raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
+        with open(self.config_path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
 
-    def get(self, *keys: str, default=None) -> Any:
+    def get(self, *keys: str, default: Any = None) -> Any:
         """
-        安全地获取嵌套配置项。
-        用法: config.get("retrieval", "top_k") -> 3
+        通过键路径获取配置值。
+
+        用法:
+            cfg.get("retrieval", "top_k")         # -> 3
+            cfg.get("paths", "vectorizer")        # -> "data/processed/vectorizer.pkl"
+            cfg.get("nonexistent", default=42)     # -> 42
         """
         value = self.config
         for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-                if value is None:
-                    return default
+            if isinstance(value, dict) and key in value:
+                value = value[key]
             else:
                 return default
         return value
 
+    def set(self, key: str, value: Any) -> None:
+        """设置顶层配置项（用于命令行覆盖）"""
+        self.config[key] = value
+
     def __repr__(self) -> str:
-        return json.dumps(self.config, ensure_ascii=False, indent=2)
-
-
-if __name__ == "__main__":
-    # 测试配置加载
-    cfg = Config("configs/default.yaml")
-    print("=== 配置内容 ===")
-    print(cfg)
-    print("\n=== 单项访问 ===")
-    print(f"检索方法: {cfg.get('retrieval', 'method')}")
-    print(f"Top-K: {cfg.get('retrieval', 'top_k')}")
-    print(f"不存在的键: {cfg.get('nonexist', default='默认值')}")
+        return f"Config({self.config_path})"
