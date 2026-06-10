@@ -30,10 +30,11 @@ class TfidfRetriever:
         self.config = config or {}
         self.tokenizer = ChineseTokenizer(method="jieba")
 
-        # TF-IDF 参数
-        self.max_features = config.get("tfidf", {}).get("max_features", 5000)
-        self.ngram_range = tuple(config.get("tfidf", {}).get("ngram_range", [1, 2]))
-        self.use_idf = config.get("tfidf", {}).get("use_idf", True)
+        # TF-IDF 参数（使用 self.config 确保 None 时走默认值）
+        cfg_tfidf = self.config.get("tfidf", {})
+        self.max_features = cfg_tfidf.get("max_features", 5000)
+        self.ngram_range = tuple(cfg_tfidf.get("ngram_range", [1, 2]))
+        self.use_idf = cfg_tfidf.get("use_idf", True)
 
         # 数据
         self.questions: List[str] = []
