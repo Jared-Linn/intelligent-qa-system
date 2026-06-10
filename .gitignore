@@ -30,3 +30,6 @@ Thumbs.db
 .DS_Store
 *.swp
 web/data/*.db
+
+# Python 虚拟环境
+.venv/

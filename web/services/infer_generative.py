@@ -61,10 +61,17 @@ class GenerativeInferenceEngine:
         if self._tokenizer_base.pad_token is None:
             self._tokenizer_base.pad_token = self._tokenizer_base.eos_token
 
+        has_gpu = torch.cuda.is_available()
+        dtype = torch.bfloat16 if has_gpu else torch.float32
+        device = "auto" if has_gpu else "cpu"
+
+        if not has_gpu:
+            print("[生成式] 未检测到 GPU，使用 CPU 推理（较慢）")
+
         self._base_model = AutoModelForCausalLM.from_pretrained(
             self.base_model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
+            torch_dtype=dtype,
+            device_map=device,
             trust_remote_code=True,
         )
         self._loaded = True
@@ -118,14 +125,6 @@ class GenerativeInferenceEngine:
             }
 
         import torch
-
-        # 2. 检查 GPU
-        if not torch.cuda.is_available():
-            return {
-                "answer": "[生成式问答] 当前没有可用 GPU，生成式模型需要 GPU 推理。请在有 GPU 的机器上运行。",
-                "confidence": 0.0,
-                "source": "no_gpu",
-            }
 
         # 3. 检查 LoRA 权重
         lora_path = model.get("file_path")
