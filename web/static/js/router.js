@@ -199,23 +199,40 @@ async function loadModelList() {
             return;
         }
         container.innerHTML = data.models.map(m => `
-            <div class="model-card">
+            <div class="model-card" data-model-id="${m.id}">
                 <div class="model-type ${m.type}">${m.type === 'retrieval' ? '📄 检索式' : '🧠 生成式'}</div>
                 <h4>${m.name}</h4>
                 <p>${m.description || '无描述'}</p>
                 <div class="model-meta">
-                    <span>⭐ ${m.avg_score.toFixed(2)}</span>
-                    <span>📥 ${m.downloads}</span>
+                    <span>⭐ ${Number(m.avg_score || 0).toFixed(2)}</span>
+                    <span>📥 ${m.downloads || 0}</span>
                     <span>${m.public ? '🌍 公开' : '🔒 私有'}</span>
                 </div>
                 <div class="model-actions">
                     <a href="#/qa?model=${m.id}" class="btn-sm">测试</a>
-                    ${!m.file_path ? `<input type="file" id="upload_${m.id}" style="display:none" onchange="uploadModelFile(${m.id})">
-                        <button class="btn-sm btn-outline" onclick="document.getElementById('upload_${m.id}').click()">上传文件</button>` : ''}
-                    <button class="btn-sm btn-danger" onclick="deleteModel(${m.id})">删除</button>
+                    <input type="file" id="upload_${m.id}" style="display:none" accept=".json,.zip" onchange="uploadModelFile(${m.id})">
+                    <button class="btn-sm btn-outline btn-upload" data-upload-id="${m.id}">上传文件</button>
+                    <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">删除</button>
                 </div>
             </div>
         `).join('');
+
+        // 事件委托：点击删除/上传按钮
+        container.querySelectorAll('.btn-del').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = parseInt(e.target.dataset.delId);
+                if (confirm('确定删除此模型？')) {
+                    window.deleteModel(id).catch(err => alert(err.message));
+                }
+            };
+        });
+        container.querySelectorAll('.btn-upload').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = parseInt(e.target.dataset.uploadId);
+                const input = document.getElementById(`upload_${id}`);
+                if (input) input.click();
+            };
+        });
     } catch (err) {
         container.innerHTML = `<p class="error">加载失败: ${err.message}</p>`;
     }

@@ -36,6 +36,23 @@
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/router.js"></script>
     <script>
+        // 全局 JS 错误捕获，显示在页面上方便调试
+        window.onerror = function(msg, url, line, col, err) {
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c00;color:#fff;padding:8px;font-size:13px;z-index:9999';
+            el.textContent = 'JS Error: ' + (err?.message || msg) + ' (line ' + line + ')';
+            document.body.appendChild(el);
+            console.error('GLOBAL ERROR:', msg, err);
+        };
+        window.addEventListener('unhandledrejection', function(e) {
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;bottom:40px;left:0;right:0;background:#e67e22;color:#fff;padding:8px;font-size:13px;z-index:9999';
+            el.textContent = 'Promise Error: ' + (e.reason?.message || e.reason);
+            document.body.appendChild(el);
+            console.error('UNHANDLED PROMISE:', e.reason);
+        });
+    </script>
+    <script>
         document.addEventListener('DOMContentLoaded', () => {
             Auth._updateUI();
             Router.start();
