@@ -1,0 +1,30 @@
+# 智能问答系统 - 默认配置
+
+# 数据配置
+data:
+  raw_path: "data/raw/faq.json"       # 原始语料路径
+  processed_dir: "data/processed/"     # 预处理后数据目录
+  question_field: "question"           # JSON 中问题字段名
+  answer_field: "answer"               # JSON 中答案字段名
+
+# 检索配置
+retrieval:
+  method: "tfidf"                      # 检索方法: tfidf | bm25 | vector
+  top_k: 3                             # 返回前 K 个候选
+
+# TF-IDF 配置
+tfidf:
+  max_features: 5000                   # 最大特征数
+  ngram_range: [1, 2]                  # n-gram 范围 (1,2) 表示单字和双字
+  use_idf: true                        # 是否使用 IDF
+
+# 答案生成配置
+answer:
+  method: "direct"                     # direct: 直接返回对应答案
+  min_score: 0.1                       # 最低相似度阈值，低于此值返回"未找到答案"
+
+# 路径配置
+paths:
+  vectorizer: "data/processed/vectorizer.pkl"
+  tfidf_matrix: "data/processed/tfidf_matrix.npz"
+  processed_data: "data/processed/faq_processed.json"
