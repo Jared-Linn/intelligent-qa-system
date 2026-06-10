@@ -1,0 +1,46 @@
+# 千问 LoRA 微调配置
+
+model:
+  # Qwen2.5-3B: ~6GB FP16, LoRA ~10GB → 24GB 显存很宽松
+  # Qwen2.5-7B: ~14GB FP16, QLoRA ~16GB → 也可选
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  cache_dir: "checkpoints/qwen_cache/"
+
+lora:
+  r: 16                    # LoRA 秩
+  alpha: 32                # 缩放系数
+  dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  train_path: "data/raw/faq_expanded.json"
+  val_split: 0.1
+  max_length: 512
+
+training:
+  output_dir: "checkpoints/qwen_lora/"
+  num_epochs: 3
+  batch_size: 4
+  gradient_accumulation_steps: 8    # 等效 batch = 32
+  learning_rate: 2e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+
+  # 优化
+  fp16: true
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+
+  # 日志
+  report_to: "tensorboard"
+  run_name: "qwen_lora_faq"

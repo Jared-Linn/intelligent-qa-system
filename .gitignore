@@ -7,10 +7,10 @@ __pycache__/
 *.pt
 *.pth
 
-# 数据
+# 数据缓存
 data/processed/*
 
-# 模型
+# 模型权重
 checkpoints/*
 
 # 日志
@@ -20,7 +20,6 @@ logs/*
 # 环境
 .env
 .venv/
-conda_env/
 
 # IDE
 .vscode/
@@ -29,3 +28,4 @@ conda_env/
 # 系统
 Thumbs.db
 .DS_Store
+*.swp

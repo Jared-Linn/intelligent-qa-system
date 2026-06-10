@@ -279,7 +279,8 @@ def main():
     parser.add_argument("--question", "-q", type=str, help="单次查询的问题（FAQ 模式）")
     parser.add_argument("--mode", "-m", type=str, choices=["faq", "dialogue"],
                         default=None, help="运行模式: faq | dialogue")
-    parser.add_argument("--config", "-c", type=str, default="configs/default.yaml",
+    parser.add_argument("--config", "-c", type=str,
+                        default=str(Path(__file__).resolve().parent / "configs" / "default.yaml"),
                         help="配置文件路径")
     parser.add_argument("--top_k", "-k", type=int, default=None, help="返回 Top-K 候选")
     parser.add_argument("--no-understand", action="store_true",

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能问答系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 智能问答系统</h1>
+            <p class="subtitle">检索式问答 &nbsp;|&nbsp; 千问微调生成式（即将上线）</p>
+        </header>
+
+        <main>
+            <div class="qa-panel">
+                <div class="input-area">
+                    <input type="text" id="questionInput" placeholder="请输入你的问题..." autofocus>
+                    <button id="askBtn" onclick="askQuestion()">提问</button>
+                </div>
+
+                <div id="resultArea" class="result-area hidden">
+                    <div class="answer-card">
+                        <h3>💡 答案</h3>
+                        <p id="answerText" class="answer-text"></p>
+                        <div class="answer-meta">
+                            <span id="confidenceBadge" class="badge"></span>
+                            <span id="categoryBadge" class="badge"></span>
+                            <span id="sourceText" class="source"></span>
+                        </div>
+                    </div>
+
+                    <div id="candidatesArea" class="candidates-area hidden">
+                        <h3>📋 候选结果</h3>
+                        <ul id="candidatesList"></ul>
+                    </div>
+
+                    <div id="keywordsArea" class="keywords-area hidden">
+                        <h3>🏷️ 关键词</h3>
+                        <div id="keywordsList"></div>
+                    </div>
+                </div>
+
+                <div id="loadingArea" class="loading hidden">
+                    <div class="spinner"></div>
+                    <span>思考中...</span>
+                </div>
+
+                <div id="errorArea" class="error hidden"></div>
+            </div>
+
+            <div class="examples">
+                <h3>试试这些问题</h3>
+                <div class="example-chips">
+                    <span onclick="ask('什么是机器学习')">什么是机器学习</span>
+                    <span onclick="ask('Python 列表和元组有什么区别')">Python 列表和元组</span>
+                    <span onclick="ask('什么是 Docker')">什么是 Docker</span>
+                    <span onclick="ask('HTTP 和 HTTPS 有什么区别')">HTTP vs HTTPS</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        async function askQuestion() {
+            const input = document.getElementById('questionInput');
+            const q = input.value.trim();
+            if (!q) return;
+            await ask(q);
+        }
+
+        async function ask(question) {
+            document.getElementById('questionInput').value = question;
+
+            // 显示加载
+            const loading = document.getElementById('loadingArea');
+            const result = document.getElementById('resultArea');
+            const error = document.getElementById('errorArea');
+            result.classList.add('hidden');
+            error.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/v1/retrieval/ask?q=${encodeURIComponent(question)}`);
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || '请求失败');
+
+                // 显示答案
+                loading.classList.add('hidden');
+                result.classList.remove('hidden');
+
+                document.getElementById('answerText').textContent = data.answer;
+
+                // 置信度
+                const conf = document.getElementById('confidenceBadge');
+                const confVal = (data.confidence * 100).toFixed(0);
+                conf.textContent = `置信度 ${confVal}%`;
+                conf.className = 'badge ' + (confVal > 70 ? 'high' : confVal > 30 ? 'mid' : 'low');
+
+                // 分类
+                const cat = document.getElementById('categoryBadge');
+                cat.textContent = data.category || '通用';
+                cat.className = 'badge category';
+
+                // 来源
+                document.getElementById('sourceText').textContent =
+                    data.source !== 'none' ? `来源: ${data.source}` : '';
+
+                // 关键词
+                const kwArea = document.getElementById('keywordsArea');
+                const kwList = document.getElementById('keywordsList');
+                if (data.keywords && data.keywords.length > 0) {
+                    kwArea.classList.remove('hidden');
+                    kwList.innerHTML = data.keywords.map(k =>
+                        `<span class="keyword-chip">${k}</span>`
+                    ).join('');
+                } else {
+                    kwArea.classList.add('hidden');
+                }
+
+                // 候选
+                const candArea = document.getElementById('candidatesArea');
+                const candList = document.getElementById('candidatesList');
+                if (data.candidates && data.candidates.length > 1) {
+                    candArea.classList.remove('hidden');
+                    candList.innerHTML = data.candidates.map((c, i) =>
+                        `<li><span class="cand-score">${(c.score * 100).toFixed(0)}%</span> ${c.question}</li>`
+                    ).join('');
+                } else {
+                    candArea.classList.add('hidden');
+                }
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                error.classList.remove('hidden');
+                error.textContent = '❌ ' + err.message;
+            }
+        }
+
+        // Enter 键触发提问
+        document.getElementById('questionInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') askQuestion();
+        });
+    </script>
+</body>
+</html>

@@ -23,7 +23,8 @@ from utils.metrics import MetricsCalculator
 
 def main():
     parser = argparse.ArgumentParser(description="智能问答系统 — 评价脚本")
-    parser.add_argument("--config", "-c", type=str, default="configs/default.yaml")
+    parser.add_argument("--config", "-c", type=str,
+                        default=str(Path(__file__).resolve().parent / "configs" / "default.yaml"))
     parser.add_argument("--top_k", type=int, default=5)
     args = parser.parse_args()
 

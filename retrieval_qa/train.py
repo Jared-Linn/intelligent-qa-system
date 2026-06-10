@@ -29,7 +29,8 @@ from utils.config import Config
 
 def main():
     parser = argparse.ArgumentParser(description="智能问答系统 — 训练脚本")
-    parser.add_argument("--config", "-c", type=str, default="configs/default.yaml")
+    parser.add_argument("--config", "-c", type=str,
+                        default=str(Path(__file__).resolve().parent / "configs" / "default.yaml"))
     parser.add_argument("--resume", "-r", type=str, default=None,
                         help="恢复训练的 checkpoint 路径")
     parser.add_argument("--epochs", type=int, default=None)

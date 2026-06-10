@@ -1,0 +1,238 @@
+/* 智能问答系统 — Web UI 样式 */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+/* 头部 */
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 2rem;
+    color: #1a1a2e;
+}
+
+.subtitle {
+    color: #888;
+    font-size: 0.9rem;
+    margin-top: 0.3rem;
+}
+
+/* 问答面板 */
+.qa-panel {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+.input-area {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.input-area input {
+    flex: 1;
+    padding: 0.8rem 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-area input:focus {
+    border-color: #4a6cf7;
+}
+
+.input-area button {
+    padding: 0.8rem 1.5rem;
+    background: #4a6cf7;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.input-area button:hover {
+    background: #3b5de7;
+}
+
+/* 结果区域 */
+.result-area {
+    margin-top: 1.5rem;
+}
+
+.result-area h3 {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.answer-card {
+    background: #f8f9ff;
+    border: 1px solid #e8ecff;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.answer-text {
+    font-size: 1.05rem;
+    line-height: 1.8;
+    color: #222;
+}
+
+.answer-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid #eee;
+}
+
+/* 徽章 */
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.badge.high { background: #d4edda; color: #155724; }
+.badge.mid  { background: #fff3cd; color: #856404; }
+.badge.low  { background: #f8d7da; color: #721c24; }
+.badge.category { background: #e2e3f5; color: #383d6b; }
+
+.source {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+/* 候选 */
+.candidates-area {
+    margin-top: 1rem;
+}
+
+.candidates-area ul {
+    list-style: none;
+}
+
+.candidates-area li {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.cand-score {
+    display: inline-block;
+    width: 3rem;
+    font-weight: 600;
+    color: #4a6cf7;
+}
+
+/* 关键词 */
+.keywords-area {
+    margin-top: 1rem;
+}
+
+.keyword-chip {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    margin: 0.2rem;
+    background: #e8ecff;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    color: #4a6cf7;
+}
+
+/* 加载 */
+.loading {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 1.5rem;
+    color: #888;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid #e0e0e0;
+    border-top-color: #4a6cf7;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 错误 */
+.error {
+    margin-top: 1rem;
+    padding: 0.8rem;
+    background: #fff5f5;
+    border: 1px solid #fcc;
+    border-radius: 8px;
+    color: #c00;
+}
+
+/* 示例问题 */
+.examples {
+    margin-top: 2rem;
+}
+
+.examples h3 {
+    font-size: 0.9rem;
+    color: #888;
+    margin-bottom: 0.5rem;
+}
+
+.example-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.example-chips span {
+    padding: 0.4rem 0.8rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.example-chips span:hover {
+    border-color: #4a6cf7;
+    color: #4a6cf7;
+    background: #f8f9ff;
+}
+
+/* 工具 */
+.hidden { display: none !important; }

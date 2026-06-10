@@ -1,82 +1,137 @@
 # 智能问答系统
 
-> 面向中文场景的智能问答系统 —— 问题理解 → 知识检索 → 答案生成
-
-[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)
+> 面向中文场景的智能问答系统 —— 检索式 + 生成式双路线
+>
+> [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)
+> [![FastAPI](https://img.shields.io/badge/FastAPI-0.136+-green)](https://fastapi.tiangolo.com)
+> [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-orange)](https://pytorch.org)
 
 ---
 
 ## 系统架构
 
 ```
-用户输入 → 问题理解 → 知识检索 → 答案生成 → 最终答案
-                ↑           ↑           ↑
-          问题分类       TF-IDF/BM25   答案抽取
-          关键词提取     语义检索(Q3)   答案验证
+用户输入 ──→ Web (FastAPI)
+                │
+        ┌───────┴───────┐
+        ▼               ▼
+  retrieval_qa/    generative_qa/
+  (检索式问答)     (千问 LoRA 微调)
+        │               │
+        └───────┬───────┘
+                ▼
+            最终答案
 ```
+
+### 两种问答模式
+
+| 模式 | 方法 | 状态 |
+|------|------|------|
+| **检索式** | TF-IDF / BM25 检索 + 直接返回答案 | ✅ 可用 |
+| **生成式** | Qwen2.5-3B-Instruct LoRA 微调 | 📅 待训练 |
 
 ## 快速开始
 
+### 检索式问答
+
 ```bash
-# 激活环境（conda nlp）
 conda activate nlp
 
-# FAQ 交互模式
-python predict.py -m faq
+# CLI 单次查询
+python retrieval_qa/predict.py -q "什么是机器学习"
 
-# 单次查询
-python predict.py -q "什么是机器学习"
+# FAQ 交互模式
+python retrieval_qa/predict.py -m faq
 
 # 对话模式
-python predict.py -m dialogue
+python retrieval_qa/predict.py -m dialogue
+
+# Web 界面
+uvicorn web.main:app --reload --host 0.0.0.0 --port 8000
+# 浏览器打开 http://localhost:8000
+```
+
+### 生成式问答（千问 LoRA 微调）
+
+```bash
+# 安装依赖
+pip install torch transformers datasets accelerate peft trl
+
+# 训练
+python generative_qa/train_qwen_lora.py
+
+# 推理
+python generative_qa/predict.py -q "什么是机器学习"
 ```
 
 ## 项目结构
 
 ```
-├── configs/          # 配置文件
-├── data/             # 数据与数据加载器
-│   ├── raw/          # 原始语料（FAQ + 对话）
-│   └── dataloader.py # PyTorch DataLoader
-├── models/           # 模型定义
-│   ├── encoder.py    # 文本编码器（BERT/自建）
-│   ├── qa_model.py   # 问答模型
-│   ├── retrieval.py  # 双编码器检索模型
-│   └── lora.py       # LoRA 适配层
-├── modules/          # 核心功能模块
-│   ├── preprocess.py           # 语料预处理
-│   ├── question_understanding.py # 问题理解（分类+关键词）
-│   ├── knowledge_retrieval.py   # 知识检索（TF-IDF/BM25）
-│   └── answer_generation.py    # 答案生成
-├── utils/            # 工具类（配置/指标/分词）
-├── predict.py        # 推理入口
-├── train.py          # 训练入口
-├── test.py           # 测试入口
-├── evaluate.py       # 评价入口
-└── requirements.txt  # 依赖清单
+├── retrieval_qa/           # 检索式问答
+│   ├── configs/            # 配置文件
+│   ├── modules/            # 核心模块（预处理/问题理解/检索/答案生成）
+│   ├── utils/              # 工具类（配置/指标/分词）
+│   ├── predict.py          # 推理入口
+│   ├── test.py / evaluate.py
+│   └── requirements.txt
+├── generative_qa/          # 生成式问答（千问 LoRA）
+│   ├── configs/train.yaml  # 训练配置
+│   ├── train_qwen_lora.py  # 微调训练
+│   ├── predict.py          # 推理入口
+│   └── requirements.txt
+├── web/                    # FastAPI Web 服务
+│   ├── main.py             # 应用入口
+│   ├── routers/            # API 路由
+│   │   ├── retrieval.py    # 检索式 API
+│   │   └── generative.py   # 生成式 API（预留）
+│   ├── static/             # 前端文件
+│   └── templates/
+├── data/                   # 共享数据
+│   ├── raw/                # 原始语料（FAQ 265条 + 对话35场景）
+│   └── processed/          # 预处理后数据
+├── checkpoints/            # 模型权重
+├── logs/                   # 日志
+└── requirements.txt
 ```
-
-## 学习路线
-
-| 课程 | 内容 | 状态 |
-|------|------|------|
-| 第1课 | 项目骨架 + TF-IDF 检索 | ✅ |
-| 第2课 | 问题理解模块 | ✅ |
-| 第3课 | 语义检索与向量化 (FAISS) | 📅 |
-| 第4课 | 检索增强生成 (RAG + LLM) | 📅 |
-| 第5课 | 模型评价与优化 | 📅 |
 
 ## 技术栈
 
-- **框架**: PyTorch 2.x, Transformers
-- **分词**: jieba
-- **检索**: TF-IDF / BM25
-- **模型**: BERT / RoBERTa（预留 LoRA 微调）
+| 层 | 技术 |
+|----|------|
+| Web 框架 | FastAPI |
+| 深度学习 | PyTorch 2.x, Transformers |
+| 分词 | jieba |
+| 检索 | TF-IDF / BM25 |
+| 生成模型 | Qwen2.5-3B-Instruct + LoRA |
+| 训练硬件 | RTX 3090 (24GB) |
+| 环境管理 | conda (nlp) |
 
-## 数据
+## API 文档
 
-- `data/raw/faq_expanded.json` — 265 条 FAQ，覆盖 20+ 分类
-- `data/raw/dialogues.json` — 35 个多轮对话场景
+启动 Web 服务后访问:
+
+- Swagger UI: http://localhost:8000/docs
+- Redoc: http://localhost:8000/redoc
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/retrieval/ask` | POST/GET | 检索式问答 |
+| `/api/v1/generative/ask` | POST/GET | 生成式问答（预留） |
+| `/api/v1/generative/status` | GET | 生成式服务状态 |
+| `/health` | GET | 健康检查 |
+
+## 学习路线
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| 第1课 | 项目骨架 + TF-IDF 检索 | ✅ |
+| 第2课 | 问题理解模块（分类+关键词） | ✅ |
+| 📍 **现在** | **FastAPI Web 服务 + 项目拆分** | ✅ |
+| 第3课 | 千问 LoRA 微调训练 | 📅 |
+| 第4课 | 语义检索 FAISS + 混合检索 | 📅 |
+| 第5课 | 评价与调优 | 📅 |
 
 ## License
 
