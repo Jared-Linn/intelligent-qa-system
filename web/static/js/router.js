@@ -244,7 +244,11 @@ async function loadModelList() {
                     <span>${m.public ? '🌍 公开' : '🔒 私有'}</span>
                     <span>🆔 #${m.id}</span>
                 </div>
-                <div class="model-actions">
+                <div class="upload-progress" id="progress_${m.id}" style="display:none">
+                        <div class="progress-track"><div class="progress-fill" id="progressFill_${m.id}"></div></div>
+                        <span class="progress-text" id="progressText_${m.id}">0%</span>
+                    </div>
+                    <div class="model-actions">
                     <a href="#/qa?model=${m.id}" class="btn-sm ${m.file_path ? 'btn-primary' : ''}">🧪 测试</a>
                     <input type="file" id="upload_${m.id}" style="display:none"
                            accept="${m.type === 'retrieval' ? '.json' : '.zip,.tar.gz,.tgz,.rar'}"
@@ -336,14 +340,49 @@ window.updateTypeHint = function() {
     }
 };
 
-window.uploadModelFile = async (modelId) => {
+window.uploadModelFile = (modelId) => {
     const input = document.getElementById(`upload_${modelId}`);
     const file = input.files[0];
     if (!file) return;
-    try {
-        await API.uploadModelFile(modelId, file);
-        loadModelList();
-    } catch (err) { alert(err.message); }
+
+    const pd = document.getElementById(`progress_${modelId}`);
+    const pf = document.getElementById(`progressFill_${modelId}`);
+    const pt = document.getElementById(`progressText_${modelId}`);
+    pd.style.display = 'flex'; pf.style.width = '0%'; pt.textContent = '0%';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', API.BASE + '/api/models/' + modelId + '/upload');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + Auth.getToken());
+
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            var pct = Math.round(e.loaded / e.total * 100);
+            pf.style.width = pct + '%';
+            pt.textContent = pct + '%';
+        }
+    };
+
+    xhr.onload = function() {
+        pd.style.display = 'none';
+        if (xhr.status >= 200 && xhr.status < 300) {
+            loadModelList();
+        } else {
+            try { var err = JSON.parse(xhr.responseText); alert(err.detail || '上传失败'); }
+            catch(e) { alert('上传失败 (' + xhr.status + ')'); }
+        }
+        input.value = '';
+    };
+
+    xhr.onerror = function() {
+        pd.style.display = 'none';
+        alert('网络错误，上传失败');
+        input.value = '';
+    };
+
+    xhr.send(fd);
 };
 
 window.deleteModel = async (modelId) => {
