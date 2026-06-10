@@ -64,6 +64,8 @@ async def upload_model_file(
             file_path = save_lora_weights(user["id"], model_id, content, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传处理失败: {str(e)}")
 
     update_model_file(model_id, file_path)
     return {"message": "上传成功", "file_path": file_path}

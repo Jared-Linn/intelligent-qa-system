@@ -1,8 +1,9 @@
 """
 文件管理服务 — 上传 / 解压 / 校验
 
-- LoRA 权重上传为 zip 或 tar.gz，解压到 models/{user_id}/{model_id}/
+- LoRA 权重上传为 zip/tar.gz/rar，解压到 models/{user_id}/{model_id}/
 - 检索式数据上传为 JSON，存到 models/{user_id}/{model_id}/
+- 自动扁平化解压：如果压缩包内只有一个顶层目录，自动提升一层
 """
 
 import os
@@ -19,6 +20,31 @@ UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "checkpoints" / "up
 
 def _ensure_dir(path: Path):
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _flatten_single_subdir(model_dir: Path):
+    """
+    如果解压后所有文件都在一个子目录里（常见 zip/rar 打包行为），
+    把文件提升到 model_dir 根目录。
+    """
+    children = list(model_dir.iterdir())
+    if len(children) == 1 and children[0].is_dir():
+        subdir = children[0]
+        for item in subdir.iterdir():
+            dest = model_dir / item.name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest, ignore_errors=True)
+                else:
+                    dest.unlink()
+            shutil.move(str(item), str(dest))
+        shutil.rmtree(subdir, ignore_errors=True)
+
+
+def _validate_adapter(model_dir: Path):
+    """校验解压后 adapter_config.json 存在"""
+    if not (model_dir / "adapter_config.json").exists():
+        raise ValueError("解压后未找到 adapter_config.json，请检查压缩包内容")
 
 
 def get_model_dir(user_id: int, model_id: int) -> Path:
@@ -59,52 +85,69 @@ def save_lora_weights(user_id: int, model_id: int,
     保存生成式 LoRA 权重。
     支持 .zip / .tar.gz / .tgz / .rar 格式，自动识别解压。
     校验解压后包含 adapter_config.json。
+    自动处理压缩包内嵌套目录。
     """
     model_dir = get_model_dir(user_id, model_id)
     _ensure_dir(model_dir)
+
+    # 清空旧文件（如果重新上传）
+    for item in model_dir.iterdir():
+        if item.is_dir():
+            shutil.rmtree(item, ignore_errors=True)
+        else:
+            item.unlink()
 
     suffix = Path(filename).suffix.lower()
     archive_path = model_dir / filename
     archive_path.write_bytes(content)
 
     # 判断格式并解压
-    if suffix == ".zip":
-        try:
+    try:
+        if suffix == ".zip":
             with zipfile.ZipFile(archive_path, "r") as zf:
                 file_list = zf.namelist()
                 if not any("adapter_config.json" in f for f in file_list):
                     raise ValueError("压缩包中必须包含 adapter_config.json")
                 zf.extractall(model_dir)
-        except zipfile.BadZipFile:
-            raise ValueError("文件不是合法的 zip 格式")
 
-    elif suffix in (".gz", ".tgz") or filename.endswith(".tar.gz"):
-        try:
+        elif suffix in (".gz", ".tgz") or filename.endswith(".tar.gz"):
             with tarfile.open(archive_path, "r:gz") as tf:
                 file_list = tf.getnames()
                 if not any("adapter_config.json" in f for f in file_list):
                     raise ValueError("压缩包中必须包含 adapter_config.json")
                 tf.extractall(model_dir)
-        except tarfile.TarError:
-            raise ValueError("文件不是合法的 tar.gz 格式")
 
-    elif suffix == ".rar":
-        try:
+        elif suffix == ".rar":
             import rarfile
             with rarfile.RarFile(archive_path, "r") as rf:
                 file_list = rf.namelist()
                 if not any("adapter_config.json" in f for f in file_list):
                     raise ValueError("压缩包中必须包含 adapter_config.json")
                 rf.extractall(model_dir)
-        except rarfile.RarCannotExec:
-            raise ValueError("服务端未安装 unrar 工具，请联系管理员安装")
-        except Exception as e:
-            raise ValueError(f"文件不是合法的 rar 格式: {str(e)}")
 
-    else:
-        raise ValueError(f"不支持的压缩格式: {suffix}，请使用 .zip / .tar.gz / .rar")
+        else:
+            raise ValueError(f"不支持的压缩格式: {suffix}，请使用 .zip / .tar.gz / .rar")
 
+    except zipfile.BadZipFile:
+        raise ValueError("文件不是合法的 zip 格式")
+    except tarfile.TarError:
+        raise ValueError("文件不是合法的 tar.gz 格式")
+    except rarfile.RarCannotExec:
+        raise ValueError("服务端未安装 unrar 工具，请联系管理员安装")
+    except ValueError:
+        raise  # 透传校验错误
+    except Exception as e:
+        raise ValueError(f"解压失败: {str(e)}")
+
+    # 清理压缩包
     archive_path.unlink()
+
+    # 扁平化嵌套目录
+    _flatten_single_subdir(model_dir)
+
+    # 最终校验
+    _validate_adapter(model_dir)
+
     return str(model_dir)
 
 
