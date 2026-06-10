@@ -154,10 +154,11 @@ async function renderDashboard() {
                     <div class="form-group"><label>模型名称</label><input type="text" id="modelName" required></div>
                     <div class="form-group">
                         <label>类型</label>
-                        <select id="modelType">
-                            <option value="retrieval">检索式 (FAQ数据)</option>
-                            <option value="generative">生成式 (LoRA权重)</option>
+                        <select id="modelType" onchange="updateTypeHint()">
+                            <option value="retrieval">检索式 — TF-IDF匹配，CPU秒级响应</option>
+                            <option value="generative">生成式 — 千问LoRA微调，需GPU</option>
                         </select>
+                        <div id="typeHint" class="form-hint">上传 JSON 问答数据文件</div>
                     </div>
                     <div class="form-group"><label>描述</label><textarea id="modelDesc" rows="2"></textarea></div>
                     <div class="form-group">
@@ -209,7 +210,7 @@ async function loadModelList() {
                 <div class="file-status ${m.file_path ? 'uploaded' : 'pending'}">
                     ${m.file_path
                         ? '📎 已上传: ' + decodeURIComponent(m.file_path.split('/').pop().split('\\\\').pop())
-                        : '⏳ 等待上传'}
+                        : m.type === 'retrieval' ? '⏳ 等待上传 FAQ 数据（.json）' : '⏳ 等待上传 LoRA 权重（.zip）'}
                 </div>
                 <div class="model-meta">
                     <span>⭐ ${Number(m.avg_score || 0).toFixed(2)}</span>
@@ -225,6 +226,7 @@ async function loadModelList() {
                     <button class="btn-sm btn-outline btn-upload" data-upload-id="${m.id}">
                         ${m.file_path ? '🔄 重新上传' : '📤 上传文件'}
                     </button>
+                    <span class="file-hint">${m.type === 'retrieval' ? '支持 .json' : '支持 .zip'}</span>
                     <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">🗑️ 删除</button>
                 </div>
             </div>
@@ -253,6 +255,17 @@ async function loadModelList() {
 
 window.showCreateModel = () => document.getElementById('createModelForm').classList.remove('hidden');
 window.hideCreateModel = () => document.getElementById('createModelForm').classList.add('hidden');
+
+
+window.updateTypeHint = function() {
+    const sel = document.getElementById('modelType');
+    const hint = document.getElementById('typeHint');
+    if (sel && hint) {
+        hint.textContent = sel.value === 'retrieval'
+            ? '上传 JSON 问答数据文件（含 question + answer 字段）'
+            : '上传 LoRA 权重 zip 包（含 adapter_config.json）';
+    }
+};
 
 window.uploadModelFile = async (modelId) => {
     const input = document.getElementById(`upload_${modelId}`);
