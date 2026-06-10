@@ -247,12 +247,12 @@ async function loadModelList() {
                 <div class="model-actions">
                     <a href="#/qa?model=${m.id}" class="btn-sm ${m.file_path ? 'btn-primary' : ''}">🧪 测试</a>
                     <input type="file" id="upload_${m.id}" style="display:none"
-                           accept="${m.type === 'retrieval' ? '.json' : '.zip,.tar.gz,.tgz'}"
+                           accept="${m.type === 'retrieval' ? '.json' : '.zip,.tar.gz,.tgz,.rar'}"
                            onchange="uploadModelFile(${m.id})">
                     <button class="btn-sm btn-outline btn-upload" data-upload-id="${m.id}">
                         ${m.file_path ? '🔄 重新上传' : '📤 上传文件'}
                     </button>
-                    <span class="file-hint">${m.type === 'retrieval' ? '支持 .json' : '支持 .zip / .tar.gz'}</span>
+                    <span class="file-hint">${m.type === 'retrieval' ? '支持 .json' : '支持 .zip / .tar.gz / .rar'}</span>
                     <button class="btn-sm btn-outline btn-edit" data-edit-id="${m.id}">✏️ 编辑</button>
                     <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">🗑️ 删除</button>
                 </div>
@@ -332,7 +332,7 @@ window.updateTypeHint = function() {
     if (sel && hint) {
         hint.textContent = sel.value === 'retrieval'
             ? '上传 JSON 问答数据文件（含 question + answer 字段）'
-            : '上传 LoRA 权重压缩包（.zip / .tar.gz，需包含 adapter_config.json）';
+            : '上传 LoRA 权重压缩包（.zip / .tar.gz / .rar，需包含 adapter_config.json）';
     }
 };
 

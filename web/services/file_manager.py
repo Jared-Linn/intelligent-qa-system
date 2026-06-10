@@ -57,7 +57,7 @@ def save_lora_weights(user_id: int, model_id: int,
                       content: bytes, filename: str = "lora.zip") -> Optional[str]:
     """
     保存生成式 LoRA 权重。
-    支持 .zip 和 .tar.gz / .tgz 格式，自动识别解压。
+    支持 .zip / .tar.gz / .tgz / .rar 格式，自动识别解压。
     校验解压后包含 adapter_config.json。
     """
     model_dir = get_model_dir(user_id, model_id)
@@ -88,8 +88,21 @@ def save_lora_weights(user_id: int, model_id: int,
         except tarfile.TarError:
             raise ValueError("文件不是合法的 tar.gz 格式")
 
+    elif suffix == ".rar":
+        try:
+            import rarfile
+            with rarfile.RarFile(archive_path, "r") as rf:
+                file_list = rf.namelist()
+                if not any("adapter_config.json" in f for f in file_list):
+                    raise ValueError("压缩包中必须包含 adapter_config.json")
+                rf.extractall(model_dir)
+        except rarfile.RarCannotExec:
+            raise ValueError("服务端未安装 unrar 工具，请联系管理员安装")
+        except Exception as e:
+            raise ValueError(f"文件不是合法的 rar 格式: {str(e)}")
+
     else:
-        raise ValueError(f"不支持的压缩格式: {suffix}，请使用 .zip 或 .tar.gz")
+        raise ValueError(f"不支持的压缩格式: {suffix}，请使用 .zip / .tar.gz / .rar")
 
     archive_path.unlink()
     return str(model_dir)

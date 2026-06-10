@@ -23,3 +23,6 @@ scipy>=1.9.0
 # accelerate>=0.28.0
 # peft>=0.10.0
 # trl>=0.8.0
+
+# RAR 解压支持（生成式 LoRA 上传）
+rarfile>=4.0
