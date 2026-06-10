@@ -159,10 +159,9 @@ def main():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        TrainingArguments,
     )
     from peft import LoraConfig, get_peft_model
-    from trl import SFTTrainer
+    from trl import SFTTrainer, SFTConfig
 
     # ── 1. Tokenizer ─────────────────────────────────────────────────
     logger.info("[1/5] 加载 Tokenizer ...")
@@ -236,7 +235,7 @@ def main():
 
     trainer = SFTTrainer(
         model=model,
-        args=TrainingArguments(
+        args=SFTConfig(
             output_dir=output_dir,
             num_train_epochs=cfg["training"]["num_epochs"],
             per_device_train_batch_size=cfg["training"]["batch_size"],
@@ -265,12 +264,12 @@ def main():
             gradient_checkpointing=cfg["training"].get("gradient_checkpointing", True),
             gradient_checkpointing_kwargs={"use_reentrant": False},
             seed=42,
+            max_length=cfg["data"]["max_length"],
         ),
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         formatting_func=format_func,
-        max_seq_length=cfg["data"]["max_length"],
     )
 
     # ── 训练 ─────────────────────────────────────────────────────────
