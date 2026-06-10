@@ -200,19 +200,32 @@ async function loadModelList() {
         }
         container.innerHTML = data.models.map(m => `
             <div class="model-card" data-model-id="${m.id}">
-                <div class="model-type ${m.type}">${m.type === 'retrieval' ? '📄 检索式' : '🧠 生成式'}</div>
+                <div class="card-header">
+                    <span class="model-type ${m.type}">${m.type === 'retrieval' ? '📄 检索式' : '🧠 生成式'}</span>
+                    <span class="model-status-badge ${m.status}">${m.status === 'active' ? '✅ 正常' : '⛔ 停用'}</span>
+                </div>
                 <h4>${m.name}</h4>
                 <p>${m.description || '无描述'}</p>
+                <div class="file-status ${m.file_path ? 'uploaded' : 'pending'}">
+                    ${m.file_path
+                        ? '📎 已上传: ' + decodeURIComponent(m.file_path.split('/').pop().split('\\\\').pop())
+                        : '⏳ 等待上传'}
+                </div>
                 <div class="model-meta">
                     <span>⭐ ${Number(m.avg_score || 0).toFixed(2)}</span>
                     <span>📥 ${m.downloads || 0}</span>
                     <span>${m.public ? '🌍 公开' : '🔒 私有'}</span>
+                    <span>🆔 #${m.id}</span>
                 </div>
                 <div class="model-actions">
-                    <a href="#/qa?model=${m.id}" class="btn-sm">测试</a>
-                    <input type="file" id="upload_${m.id}" style="display:none" accept=".json,.zip" onchange="uploadModelFile(${m.id})">
-                    <button class="btn-sm btn-outline btn-upload" data-upload-id="${m.id}">上传文件</button>
-                    <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">删除</button>
+                    <a href="#/qa?model=${m.id}" class="btn-sm ${m.file_path ? 'btn-primary' : ''}">🧪 测试</a>
+                    <input type="file" id="upload_${m.id}" style="display:none"
+                           accept="${m.type === 'retrieval' ? '.json' : '.zip'}"
+                           onchange="uploadModelFile(${m.id})">
+                    <button class="btn-sm btn-outline btn-upload" data-upload-id="${m.id}">
+                        ${m.file_path ? '🔄 重新上传' : '📤 上传文件'}
+                    </button>
+                    <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">🗑️ 删除</button>
                 </div>
             </div>
         `).join('');

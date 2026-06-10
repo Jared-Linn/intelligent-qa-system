@@ -86,13 +86,18 @@ body {
 
 .model-grid { display: grid; gap: 1rem; }
 .model-card { background: white; padding: 1rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-.model-type { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
+.model-type { font-size: 0.8rem; font-weight: 600; }
 .model-type.retrieval { color: #4a6cf7; }
 .model-type.generative { color: #e67e22; }
-.model-card h4 { font-size: 1.05rem; }
+.model-status-badge { font-size: 0.75rem; }
+.model-card h4 { font-size: 1.05rem; margin-top: 0.2rem; }
 .model-card p { color: #888; font-size: 0.85rem; }
+.file-status { font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 4px; margin: 0.3rem 0; display: inline-block; }
+.file-status.uploaded { color: #155724; background: #d4edda; }
+.file-status.pending { color: #856404; background: #fff3cd; }
 .model-meta { display: flex; gap: 1rem; font-size: 0.8rem; color: #888; margin: 0.5rem 0; }
-.model-actions { display: flex; gap: 0.5rem; }
+.model-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 /* 问答页 */
 .qa-page { }
