@@ -61,7 +61,7 @@ async def upload_model_file(
         if model["type"] == "retrieval":
             file_path = save_retrieval_data(user["id"], model_id, content)
         else:
-            file_path = save_lora_weights(user["id"], model_id, content)
+            file_path = save_lora_weights(user["id"], model_id, content, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

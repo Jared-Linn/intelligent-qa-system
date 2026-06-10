@@ -1,12 +1,13 @@
 """
 文件管理服务 — 上传 / 解压 / 校验
 
-- LoRA 权重上传为 zip，解压到 models/{user_id}/{model_id}/
+- LoRA 权重上传为 zip 或 tar.gz，解压到 models/{user_id}/{model_id}/
 - 检索式数据上传为 JSON，存到 models/{user_id}/{model_id}/
 """
 
 import os
 import json
+import tarfile
 import zipfile
 import shutil
 from pathlib import Path
@@ -56,28 +57,41 @@ def save_lora_weights(user_id: int, model_id: int,
                       content: bytes, filename: str = "lora.zip") -> Optional[str]:
     """
     保存生成式 LoRA 权重。
-    接收 zip 压缩包，解压到模型目录。
+    支持 .zip 和 .tar.gz / .tgz 格式，自动识别解压。
+    校验解压后包含 adapter_config.json。
     """
     model_dir = get_model_dir(user_id, model_id)
     _ensure_dir(model_dir)
 
-    zip_path = model_dir / filename
-    zip_path.write_bytes(content)
+    suffix = Path(filename).suffix.lower()
+    archive_path = model_dir / filename
+    archive_path.write_bytes(content)
 
-    # 解压
-    try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            # 校验 zip 中是否包含 adapter_config.json
-            file_list = zf.namelist()
-            if not any("adapter_config.json" in f for f in file_list):
-                raise ValueError("LoRA zip 中必须包含 adapter_config.json")
+    # 判断格式并解压
+    if suffix == ".zip":
+        try:
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                file_list = zf.namelist()
+                if not any("adapter_config.json" in f for f in file_list):
+                    raise ValueError("压缩包中必须包含 adapter_config.json")
+                zf.extractall(model_dir)
+        except zipfile.BadZipFile:
+            raise ValueError("文件不是合法的 zip 格式")
 
-            zf.extractall(model_dir)
-    except zipfile.BadZipFile:
-        raise ValueError("文件不是合法的 zip 格式")
+    elif suffix in (".gz", ".tgz") or filename.endswith(".tar.gz"):
+        try:
+            with tarfile.open(archive_path, "r:gz") as tf:
+                file_list = tf.getnames()
+                if not any("adapter_config.json" in f for f in file_list):
+                    raise ValueError("压缩包中必须包含 adapter_config.json")
+                tf.extractall(model_dir)
+        except tarfile.TarError:
+            raise ValueError("文件不是合法的 tar.gz 格式")
 
-    # 删除原始 zip
-    zip_path.unlink()
+    else:
+        raise ValueError(f"不支持的压缩格式: {suffix}，请使用 .zip 或 .tar.gz")
+
+    archive_path.unlink()
     return str(model_dir)
 
 
