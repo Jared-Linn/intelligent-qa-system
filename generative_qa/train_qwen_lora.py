@@ -121,6 +121,16 @@ def main():
         cfg["training"]["batch_size"] = args.batch_size
     if args.lr:
         cfg["training"]["learning_rate"] = args.lr
+
+    # 确保数值字段是 float/int 而非 str(YAML解析兼容)
+    for num_key in ["learning_rate", "warmup_ratio", "weight_decay", "max_grad_norm"]:
+        val = cfg["training"].get(num_key)
+        if isinstance(val, str):
+            try:
+                cfg["training"][num_key] = float(val)
+            except ValueError:
+                pass
+
     if args.output_dir:
         cfg["training"]["output_dir"] = args.output_dir
 

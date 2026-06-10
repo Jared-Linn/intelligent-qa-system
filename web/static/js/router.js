@@ -363,20 +363,24 @@ async function renderQA() {
     try {
         const pub = await API.listPublicModels();
         models = pub.models || [];
-    } catch {}  // 未登录也能看公开模型
+    } catch {}
 
     app.innerHTML = `
-        <div class="qa-page">
-            <h2>问答测试</h2>
-            <div class="qa-controls">
-                <select id="qaModelSelect">
+        <div class="chat-page">
+            <div class="chat-header">
+                <select id="qaModelSelect" class="chat-model-select">
                     <option value="">-- 选择模型 --</option>
-                    ${models.map(m => `<option value="${m.id}" ${m.id == selectedModelId ? 'selected' : ''}>${m.name} (${m.type})</option>`).join('')}
+                    ${models.map(m => `<option value="${m.id}" ${m.id == selectedModelId ? 'selected' : ''}>${m.name} (${m.type === 'retrieval' ? '检索' : '生成'})</option>`).join('')}
                 </select>
-                <input type="text" id="qaInput" placeholder="输入问题..." autofocus>
-                <button class="btn btn-primary" onclick="doAsk()">提问</button>
+                <button class="btn-sm btn-outline" onclick="clearChat()">清空</button>
             </div>
-            <div id="qaResult" class="qa-result hidden"></div>
+            <div id="chatMessages" class="chat-messages">
+                <div class="chat-placeholder">选择一个模型，开始对话</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="qaInput" placeholder="输入消息..." autofocus>
+                <button class="btn btn-primary" onclick="doAsk()">发送</button>
+            </div>
         </div>
     `;
     document.getElementById('qaInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doAsk(); });
@@ -385,31 +389,66 @@ async function renderQA() {
     }
 }
 
+function scrollToBottom() {
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+window.clearChat = function() {
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.innerHTML = '<div class="chat-placeholder">选择一个模型，开始对话</div>';
+};
+
 window.doAsk = async () => {
     const modelId = document.getElementById('qaModelSelect').value;
-    const question = document.getElementById('qaInput').value.trim();
+    const input = document.getElementById('qaInput');
+    const question = input.value.trim();
     if (!modelId || !question) return;
 
-    const resultEl = document.getElementById('qaResult');
-    resultEl.classList.remove('hidden');
-    resultEl.innerHTML = '<div class="loading"><div class="spinner"></div> 思考中...</div>';
+    const msgs = document.getElementById('chatMessages');
+    // 移除 placeholder
+    const ph = msgs.querySelector('.chat-placeholder');
+    if (ph) ph.remove();
+
+    // 添加用户消息气泡
+    const userBubble = document.createElement('div');
+    userBubble.className = 'msg-row msg-user';
+    userBubble.innerHTML = '<div class="msg-bubble">' + escapeHtml(question) + '</div>';
+    msgs.appendChild(userBubble);
+    input.value = '';
+    scrollToBottom();
+
+    // 添加"思考中"气泡
+    const loadingBubble = document.createElement('div');
+    loadingBubble.className = 'msg-row msg-ai';
+    loadingBubble.id = 'chatLoading';
+    loadingBubble.innerHTML = '<div class="msg-bubble loading"><div class="spinner"></div> 思考中...</div>';
+    msgs.appendChild(loadingBubble);
+    scrollToBottom();
 
     try {
         const data = await API.ask(parseInt(modelId), question);
-        resultEl.innerHTML = `
-            <div class="answer-card">
-                <p class="answer-text">${data.answer}</p>
-                <div class="answer-meta">
-                    <span class="badge ${data.confidence > 0.7 ? 'high' : 'mid'}">${(data.confidence*100).toFixed(0)}%</span>
-                    <span class="badge category">${data.model_name}</span>
-                    <span class="source">${data.latency_ms}ms</span>
-                </div>
-            </div>
-        `;
+        document.getElementById('chatLoading').remove();
+
+        // AI 回复气泡
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'msg-row msg-ai';
+        const confPct = (data.confidence * 100).toFixed(0);
+        aiBubble.innerHTML = '<div class="msg-bubble">' + escapeHtml(data.answer)
+            + '<div class="msg-meta">' + confPct + '% · ' + data.latency_ms + 'ms</div></div>';
+        msgs.appendChild(aiBubble);
     } catch (err) {
-        resultEl.innerHTML = `<div class="form-error">${err.message}</div>`;
+        const loading = document.getElementById('chatLoading');
+        if (loading) loading.innerHTML = '<div class="msg-bubble error">' + escapeHtml(err.message) + '</div>';
     }
+    scrollToBottom();
 };
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 async function renderRanking() {
     const app = document.getElementById('app');
