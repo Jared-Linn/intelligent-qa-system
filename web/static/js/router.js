@@ -14,7 +14,9 @@ const Router = {
     },
 
     getCurrentPath() {
-        return window.location.hash.slice(1) || '/';
+        const hash = window.location.hash.slice(1) || '/';
+        // 分离路径和查询参数，只取路径部分匹配路由
+        return hash.split('?')[0];
     },
 
     async handle() {
@@ -245,16 +247,11 @@ async function renderQA() {
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     const selectedModelId = params.get('model');
 
-    // 加载模型列表
     let models = [];
     try {
-        const mine = await API.listMyModels();
         const pub = await API.listPublicModels();
-        models = [...mine.models, ...pub.models];
-        // 去重
-        const seen = new Set();
-        models = models.filter(m => { const k = m.id; if (seen.has(k)) return false; seen.add(k); return true; });
-    } catch {}
+        models = pub.models || [];
+    } catch {}  // 未登录也能看公开模型
 
     app.innerHTML = `
         <div class="qa-page">
