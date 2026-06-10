@@ -1,10 +1,16 @@
 # 千问 LoRA 微调配置
+#
+# 改动说明:
+#   epochs 3→50      小数据(265条), 多轮充分学习
+#   warmup_ratio 0.03→0.1  前5轮热身, 防止初期震荡
+#   新增 val_split     训练/验证分割
+#   新增 save_total_limit   防30G root爆盘
+#   新增 eval_strategy      每epoch评估
 
 model:
-  # Qwen2.5-3B: ~6GB FP16, LoRA ~10GB → 24GB 显存很宽松
-  # Qwen2.5-7B: ~14GB FP16, QLoRA ~16GB → 也可选
+  # Qwen2.5-3B: ~6GB FP16, LoRA training ~12GB → 24GB 显存宽松
   name: "Qwen/Qwen2.5-3B-Instruct"
-  cache_dir: "checkpoints/qwen_cache/"
+  cache_dir: "/autodl-pub/models/qwen_cache/"
 
 lora:
   r: 16                    # LoRA 秩
@@ -21,26 +27,31 @@ lora:
 
 data:
   train_path: "data/raw/faq_expanded.json"
-  val_split: 0.1
-  max_length: 512
+  val_split: 0.1           # 10% 作验证集 (约26条)
+  max_length: 512          # 截断长度
 
 training:
-  output_dir: "checkpoints/qwen_lora/"
-  num_epochs: 3
+  output_dir: "/autodl-pub/checkpoints/qwen_lora/"
+  num_epochs: 50           # 小数据, 充分学习
   batch_size: 4
   gradient_accumulation_steps: 8    # 等效 batch = 32
   learning_rate: 2e-4
-  warmup_ratio: 0.03
+  warmup_ratio: 0.1        # 前5轮热身 (epoch=50时)
   weight_decay: 0.01
-  logging_steps: 10
-  save_steps: 200
-  eval_steps: 200
+  logging_steps: 5         # 265条, 高频打日志
+  save_steps: 0            # 0 = 不按step, 改用save_strategy=epoch
+  save_strategy: "epoch"
+  save_total_limit: 3      # 只保留最近3个checkpoint, 防爆盘
+  eval_strategy: "epoch"   # 每epoch评估
+  eval_steps: 0
 
   # 优化
   fp16: true
+  bf16: false
   gradient_checkpointing: true
   max_grad_norm: 1.0
 
   # 日志
   report_to: "tensorboard"
   run_name: "qwen_lora_faq"
+  logging_dir: "/autodl-pub/logs/qwen_lora/"
