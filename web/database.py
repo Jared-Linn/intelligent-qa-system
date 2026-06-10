@@ -199,6 +199,10 @@ def update_model_file(model_id: int, file_path: str):
 
 def delete_model(model_id: int) -> bool:
     conn = get_db()
+    # 先删除关联数据，避免外键约束冲突
+    conn.execute("DELETE FROM ratings WHERE model_id = ?", (model_id,))
+    conn.execute("DELETE FROM usage_logs WHERE model_id = ?", (model_id,))
+    conn.execute("DELETE FROM official_scores WHERE model_id = ?", (model_id,))
     cur = conn.execute("DELETE FROM models WHERE id = ?", (model_id,))
     conn.commit()
     deleted = cur.rowcount > 0
