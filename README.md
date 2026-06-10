@@ -57,17 +57,25 @@ python retrieval_qa/predict.py -m faq
 uvicorn web.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 生成式（需要 GPU 训练）
+### 生成式（千问 LoRA 微调）
+
+✅ **训练已完成** — RTX 3090, 265条FAQ, 50 epochs, 约24分钟
+
+| 指标 | 值 |
+|------|-----|
+| train_loss | 0.214 |
+| eval_loss | 2.013 |
+| eval_token_acc | 76.08% |
 
 ```bash
-# 安装依赖
-pip install torch transformers datasets accelerate peft trl
-
-# 训练（在 3090 上约 30 分钟）
-python generative_qa/train_qwen_lora.py
-
-# CLI 推理
+# CLI 推理（加载已有 LoRA 权重）
 python generative_qa/predict.py -q "什么是机器学习"
+
+# 评测 — ROUGE / BLEU 对比检索式 baseline
+python generative_qa/evaluate.py --model_path checkpoints/qwen_lora/
+
+# 重新训练（需 GPU）
+python generative_qa/train_qwen_lora.py --epochs 50
 ```
 
 ## 项目结构
@@ -80,8 +88,10 @@ python generative_qa/predict.py -q "什么是机器学习"
 │   ├── predict.py          #   CLI 推理
 │   └── configs/            #   配置文件
 ├── generative_qa/          # 生成式问答模块（千问 LoRA）
-│   ├── train_qwen_lora.py  #   微调训练脚本
+│   ├── train_qwen_lora.py  #   SFTTrainer 微调训练
 │   ├── predict.py          #   CLI 推理
+│   ├── evaluate.py         #   ROUGE/BLEU 评测
+│   ├── setup.sh            #   远程服务器一键环境配置
 │   └── configs/            #   训练配置
 ├── web/                    # FastAPI + SPA 前端
 │   ├── main.py             #   应用入口

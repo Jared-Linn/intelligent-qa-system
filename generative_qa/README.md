@@ -67,17 +67,14 @@
 ### 安装依赖
 
 ```bash
+# 一键安装 (推荐)
+bash generative_qa/setup.sh
+
+# 或手动安装:
 conda activate nlp
 
-# 核心依赖
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install transformers>=4.40.0 datasets>=2.14.0 accelerate>=0.28.0
-
-# LoRA 微调
-pip install peft>=0.10.0 trl>=0.8.0
-
-# 可选
-pip install tensorboard
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install transformers peft trl accelerate datasets evaluate nltk tensorboard pyyaml
 ```
 
 ### 验证安装
@@ -169,15 +166,37 @@ python generative_qa/train_qwen_lora.py \
 
 ```
 checkpoints/qwen_lora/
-├── adapter_config.json      # LoRA 配置
-├── adapter_model.safetensors  # LoRA 权重
-├── tokenizer.json           # Tokenizer
-└── tokenizer_config.json
+├── adapter_config.json          # LoRA 配置
+├── adapter_model.safetensors    # LoRA 权重 (~115MB)
+├── tokenizer_config.json        # Tokenizer
+├── tokenizer.json
+├── train_config.json            # 训练配置备份
+└── checkpoint-400/              # 最佳 checkpoint
+    ├── adapter_model.safetensors
+    ├── adapter_config.json
+    └── ...
 ```
 
-整个目录约 50MB，压缩为 zip 后约 15MB。
+整个目录约 130MB，压缩为 zip 后约 110MB（含 tokenizer 词表）。
 
-### 3.5 显存优化（7B 模型）
+### 3.5 训练结果（实际跑分）
+
+在 **RTX 3090 (24GB)** 上使用 **265 条 FAQ** 训练 **50 epochs** 的结果：
+
+| 指标 | 值 | 说明 |
+|------|-----|------|
+| 训练耗时 | 24分16秒 | 400 steps, ~3.6s/step |
+| train_loss | 0.214 | 训练集损失 |
+| eval_loss | 2.013 | 验证集损失 (27条) |
+| eval_token_acc | 76.08% | Token 级准确率 |
+| 显存占用 | ~20.5GB / 24GB | 训练峰值 |
+| 等效 batch | 32 | batch=4 × grad_accum=8 |
+
+**Loss 曲线**: train_loss 从 2.19 → 0.06, eval_loss 从 1.99 → 2.01 (epoch 48 后轻微过拟合)
+
+**最佳 checkpoint**: epoch 48 (eval_loss=2.01, acc=76.14%)
+
+### 3.6 显存优化（7B 模型）
 
 如果要使用 Qwen2.5-7B 替代 3B：
 
@@ -243,6 +262,29 @@ print(result["answer"])
     "source": "no_lora"
 }
 ```
+
+### 4.4 评测脚本
+
+使用 `evaluate.py` 对训练好的模型进行 ROUGE/BLEU 评测，并对比检索式 baseline：
+
+```bash
+# 评测已训练的 LoRA 权重
+python generative_qa/evaluate.py --model_path checkpoints/qwen_lora/
+
+# 显示前 5 条样例对比
+python generative_qa/evaluate.py --model_path checkpoints/qwen_lora/ --sample 5
+```
+
+评测报告包含：
+
+| 指标 | 含义 |
+|------|------|
+| ROUGE-1 | 单字重合率 |
+| ROUGE-2 | 双字组合重合率 |
+| ROUGE-L | 最长公共子串 |
+| BLEU | n-gram 精确匹配 |
+
+结果保存到 `checkpoints/qwen_lora/eval_results.json`。
 
 ---
 
