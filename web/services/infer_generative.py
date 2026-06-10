@@ -8,12 +8,31 @@ GPU 上同一时刻只保留一个 LoRA。
 """
 
 import os
-import torch
 from pathlib import Path
 from typing import Optional
 
+# torch 和 peft 在需要时惰性导入，避免未安装时模块加载崩溃
+
 # 全局变量：当前加载的模型信息
 _current_lora = {"model_id": None, "model": None, "tokenizer": None}
+
+
+def _check_deps():
+    """检查依赖是否安装，返回缺失列表"""
+    missing = []
+    try:
+        import torch
+    except ImportError:
+        missing.append("torch")
+    try:
+        import transformers
+    except ImportError:
+        missing.append("transformers")
+    try:
+        import peft
+    except ImportError:
+        missing.append("peft")
+    return missing
 
 
 class GenerativeInferenceEngine:
@@ -30,10 +49,8 @@ class GenerativeInferenceEngine:
         if self._loaded:
             return
 
-        try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-        except ImportError:
-            raise RuntimeError("请安装: pip install torch transformers peft")
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         print("[生成式] 加载基座模型:", self.base_model_name)
         self._tokenizer_base = AutoTokenizer.from_pretrained(
@@ -56,19 +73,19 @@ class GenerativeInferenceEngine:
     def _load_lora(self, model: dict):
         """加载 LoRA 权重（如果当前已是目标 LoRA，跳过）"""
         global _current_lora
+        import torch
+        from peft import PeftModel
 
         model_id = model["id"]
         if _current_lora["model_id"] == model_id:
             return _current_lora["model"]
 
-        # 卸载当前 LoRA
         if _current_lora["model"] is not None:
             print(f"[生成式] 卸载 LoRA: {_current_lora['model_id']}")
             _current_lora["model"] = None
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        # 加载目标 LoRA
         lora_path = model.get("file_path")
         if not lora_path:
             raise ValueError("模型没有关联的 LoRA 权重文件")
@@ -77,7 +94,6 @@ class GenerativeInferenceEngine:
         if not lora_dir.exists() or not (lora_dir / "adapter_config.json").exists():
             raise FileNotFoundError(f"LoRA 权重不存在: {lora_path}")
 
-        from peft import PeftModel
         print(f"[生成式] 加载 LoRA: {model_id}")
         peft_model = PeftModel.from_pretrained(self._base_model, str(lora_dir))
         peft_model.eval()
@@ -88,15 +104,30 @@ class GenerativeInferenceEngine:
 
     def predict(self, model: dict, question: str) -> dict:
         """
-        执行生成式问答
+        执行生成式问答。
 
-        Returns:
-            { "answer": str, "confidence": float, "source": str }
+        如果依赖缺失、无 GPU、或无 LoRA 权重，返回友好提示而非崩溃。
         """
-        self._ensure_base()
+        # 1. 检查依赖
+        missing = _check_deps()
+        if missing:
+            return {
+                "answer": f"[生成式问答] 服务端缺少依赖: {', '.join(missing)}。请安装: pip install torch transformers peft",
+                "confidence": 0.0,
+                "source": "missing_deps",
+            }
 
-        # 检查 LoRA 权重是否存在
-        model_id = model["id"]
+        import torch
+
+        # 2. 检查 GPU
+        if not torch.cuda.is_available():
+            return {
+                "answer": "[生成式问答] 当前没有可用 GPU，生成式模型需要 GPU 推理。请在有 GPU 的机器上运行。",
+                "confidence": 0.0,
+                "source": "no_gpu",
+            }
+
+        # 3. 检查 LoRA 权重
         lora_path = model.get("file_path")
         if not lora_path:
             return {
@@ -105,63 +136,57 @@ class GenerativeInferenceEngine:
                 "source": "no_lora",
             }
 
-        # 检查依赖是否安装
-        try:
-            import peft
-        except ImportError:
+        lora_dir = Path(lora_path)
+        if not lora_dir.exists() or not (lora_dir / "adapter_config.json").exists():
             return {
-                "answer": "[生成式问答] 服务端未安装 PEFT 依赖。请联系管理员安装: pip install peft",
+                "answer": f"[生成式问答] LoRA 权重文件不存在: {lora_path}",
                 "confidence": 0.0,
-                "source": "missing_peft",
+                "source": "lora_not_found",
             }
 
-        # 检查 GPU
-        if not torch.cuda.is_available():
-            return {
-                "answer": "[生成式问答] 当前没有可用 GPU，生成式模型需要 GPU 推理。",
-                "confidence": 0.0,
-                "source": "no_gpu",
-            }
-
+        # 4. 推理
         try:
+            self._ensure_base()
             lora_model = self._load_lora(model)
-        except Exception as e:
-            return {
-                "answer": f"[生成式问答] 加载 LoRA 失败: {str(e)}",
-                "confidence": 0.0,
-                "source": "lora_error",
-            }
 
-        # 构造 prompt
-        messages = [
-            {"role": "system", "content": "你是一个专业的中文问答助手，请准确简洁地回答问题。"},
-            {"role": "user", "content": question},
-        ]
-        prompt = self._tokenizer_base.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+            from transformers import AutoTokenizer
 
-        inputs = self._tokenizer_base(
-            prompt, return_tensors="pt", truncation=True, max_length=512
-        ).to(lora_model.device)
-
-        with torch.no_grad():
-            outputs = lora_model.generate(
-                **inputs,
-                max_new_tokens=256,
-                temperature=0.7,
-                top_p=0.9,
-                do_sample=True,
-                pad_token_id=self._tokenizer_base.pad_token_id,
-                eos_token_id=self._tokenizer_base.eos_token_id,
+            messages = [
+                {"role": "system", "content": "你是一个专业的中文问答助手，请准确简洁地回答问题。"},
+                {"role": "user", "content": question},
+            ]
+            prompt = self._tokenizer_base.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
             )
 
-        answer = self._tokenizer_base.decode(
-            outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True
-        ).strip()
+            inputs = self._tokenizer_base(
+                prompt, return_tensors="pt", truncation=True, max_length=512
+            ).to(lora_model.device)
 
-        return {
-            "answer": answer or "[生成式] 模型未生成有效答案",
-            "confidence": 0.8,
-            "source": "qwen_lora",
-        }
+            with torch.no_grad():
+                outputs = lora_model.generate(
+                    **inputs,
+                    max_new_tokens=256,
+                    temperature=0.7,
+                    top_p=0.9,
+                    do_sample=True,
+                    pad_token_id=self._tokenizer_base.pad_token_id,
+                    eos_token_id=self._tokenizer_base.eos_token_id,
+                )
+
+            answer = self._tokenizer_base.decode(
+                outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True
+            ).strip()
+
+            return {
+                "answer": answer or "[生成式] 模型未生成有效答案",
+                "confidence": 0.8,
+                "source": "qwen_lora",
+            }
+
+        except Exception as e:
+            return {
+                "answer": f"[生成式问答] 推理失败: {str(e)}",
+                "confidence": 0.0,
+                "source": "inference_error",
+            }
