@@ -68,7 +68,8 @@ def check_deps():
         logger.info(f"PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}")
         if torch.cuda.is_available():
             p = torch.cuda.get_device_properties(0)
-            logger.info(f"GPU: {p.name}, VRAM: {p.total_mem / 1024**3:.1f}GB")
+            mem = getattr(p, 'total_memory', getattr(p, 'total_mem', 0))
+            logger.info(f"GPU: {p.name}, VRAM: {mem / 1024**3:.1f}GB")
     except ImportError:
         missing.append("torch")
 
@@ -161,7 +162,7 @@ def main():
         TrainingArguments,
     )
     from peft import LoraConfig, get_peft_model
-    from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
+    from trl import SFTTrainer
 
     # ── 1. Tokenizer ─────────────────────────────────────────────────
     logger.info("[1/5] 加载 Tokenizer ...")
@@ -269,10 +270,6 @@ def main():
         eval_dataset=val_dataset,
         tokenizer=tokenizer,
         formatting_func=format_func,
-        data_collator=DataCollatorForCompletionOnlyLM(
-            response_template="<|im_start|>assistant\n",
-            tokenizer=tokenizer,
-        ),
         max_seq_length=cfg["data"]["max_length"],
     )
 

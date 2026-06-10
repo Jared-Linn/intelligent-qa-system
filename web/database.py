@@ -210,6 +210,35 @@ def delete_model(model_id: int) -> bool:
     return deleted
 
 
+def update_model(model_id: int, name: str = None, description: str = None, public: bool = None) -> bool:
+    """更新模型属性"""
+    conn = get_db()
+    updates = []
+    params = []
+    if name is not None:
+        updates.append('name = ?')
+        params.append(name)
+    if description is not None:
+        updates.append('description = ?')
+        params.append(description)
+    if public is not None:
+        updates.append('public = ?')
+        params.append(1 if public else 0)
+    if not updates:
+        conn.close()
+        return False
+    updates.append("updated_at = datetime('now')")
+    params.append(model_id)
+    cur = conn.execute(
+        f'UPDATE models SET {", ".join(updates)} WHERE id = ?',
+        params,
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
+
+
 def increment_downloads(model_id: int):
     conn = get_db()
     conn.execute(

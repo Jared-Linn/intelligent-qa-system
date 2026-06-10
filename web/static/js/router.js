@@ -169,9 +169,35 @@ async function renderDashboard() {
                     <button type="button" class="btn btn-outline" onclick="hideCreateModel()">取消</button>
                 </form>
             </div>
+            
+            <!-- 编辑模型弹窗 -->
+            <div id="editModal" class="modal-overlay hidden">
+                <div class="modal-content">
+                    <h3>✏️ 编辑模型</h3>
+                    <form id="editForm">
+                        <input type="hidden" id="editId">
+                        <div class="form-group">
+                            <label>模型名称</label>
+                            <input type="text" id="editName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>描述</label>
+                            <textarea id="editDesc" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="editPublic"> 公开</label>
+                        </div>
+                        <div id="editError" class="form-error hidden"></div>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                        <button type="button" class="btn btn-outline" onclick="hideEditModal()">取消</button>
+                    </form>
+                </div>
+            </div>
+
             <div id="modelList" class="model-grid"><p>加载中...</p></div>
         </div>
     `;
+    setupEditModal();
     document.getElementById('modelForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
@@ -227,6 +253,7 @@ async function loadModelList() {
                         ${m.file_path ? '🔄 重新上传' : '📤 上传文件'}
                     </button>
                     <span class="file-hint">${m.type === 'retrieval' ? '支持 .json' : '支持 .zip'}</span>
+                    <button class="btn-sm btn-outline btn-edit" data-edit-id="${m.id}">✏️ 编辑</button>
                     <button class="btn-sm btn-danger btn-del" data-del-id="${m.id}">🗑️ 删除</button>
                 </div>
             </div>
@@ -239,6 +266,12 @@ async function loadModelList() {
                 if (confirm('确定删除此模型？')) {
                     window.deleteModel(id).catch(err => alert(err.message));
                 }
+            };
+        });
+        container.querySelectorAll('.btn-edit').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = parseInt(e.target.dataset.editId);
+                showEditModal(id);
             };
         });
         container.querySelectorAll('.btn-upload').forEach(btn => {
@@ -255,6 +288,42 @@ async function loadModelList() {
 
 window.showCreateModel = () => document.getElementById('createModelForm').classList.remove('hidden');
 window.hideCreateModel = () => document.getElementById('createModelForm').classList.add('hidden');
+
+window.showEditModal = async (modelId) => {
+    try {
+        const m = await API.getModel(modelId);
+        document.getElementById('editId').value = m.id;
+        document.getElementById('editName').value = m.name;
+        document.getElementById('editDesc').value = m.description || '';
+        document.getElementById('editPublic').checked = m.public;
+        document.getElementById('editModal').classList.remove('hidden');
+    } catch (err) { alert(err.message); }
+};
+
+window.hideEditModal = () => {
+    document.getElementById('editModal').classList.add('hidden');
+};
+
+function setupEditModal() {
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = '保存中...';
+        try {
+            await API.updateModel(
+                parseInt(document.getElementById('editId').value),
+                {
+                    name: document.getElementById('editName').value,
+                    description: document.getElementById('editDesc').value,
+                    public: document.getElementById('editPublic').checked,
+                }
+            );
+            hideEditModal();
+            loadModelList();
+        } catch (err) { alert(err.message); }
+        btn.disabled = false; btn.textContent = '保存';
+    });
+}
 
 
 window.updateTypeHint = function() {

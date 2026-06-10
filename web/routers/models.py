@@ -5,10 +5,10 @@
 import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
-from web.models.model import ModelCreate, ModelResponse, ModelListResponse
+from web.models.model import ModelCreate, ModelUpdate, ModelResponse, ModelListResponse
 from web.database import (
     create_model, get_user_models, get_public_models,
-    get_model_by_id, update_model_file, delete_model,
+    get_model_by_id, update_model_file, update_model, delete_model,
 )
 from web.routers.auth import get_current_user
 from web.services.file_manager import (
@@ -83,6 +83,22 @@ async def get_model_detail(model_id: int):
     if model is None:
         raise HTTPException(status_code=404, detail="模型不存在")
     return ModelResponse(**model)
+
+
+@router.put("/{model_id}", response_model=ModelResponse)
+async def update_model_by_id(model_id: int, data: ModelUpdate, user: dict = Depends(get_current_user)):
+    """更新模型属性（名称/描述/可见性）"""
+    model = get_model_by_id(model_id)
+    if model is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    if model["user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="无权操作此模型")
+    ok = update_model(model_id, name=data.name, description=data.description, public=data.public)
+    if not ok:
+        raise HTTPException(status_code=400, detail="更新失败，没有要修改的字段")
+    updated = get_model_by_id(model_id)
+    return ModelResponse(**updated)
+
 
 
 @router.delete("/{model_id}")

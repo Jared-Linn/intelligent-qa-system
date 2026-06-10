@@ -49,6 +49,10 @@ const API = {
         return this._get(`/api/models/${id}`);
     },
 
+    async updateModel(id, data) {
+        return this._put(`/api/models/${id}`, data);
+    },
+
     async deleteModel(id) {
         return this._delete(`/api/models/${id}`);
     },
@@ -103,6 +107,17 @@ const API = {
         });
         if (resp.status === 401) { Auth.logout(); window.location.hash = '#/login'; }
         if (!resp.ok) throw new Error((await resp.json()).detail || `请求失败 (${resp.status})`);
+        return resp.json();
+    },
+
+    async _put(url, data) {
+        const resp = await fetch(`${this.BASE}${url}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...this._tokenHeader() },
+            body: JSON.stringify(data),
+        });
+        if (resp.status === 401) { Auth.logout(); window.location.hash = '#/login'; }
+        if (!resp.ok) throw new Error((await resp.json()).detail || '更新失败');
         return resp.json();
     },
 

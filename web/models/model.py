@@ -32,3 +32,9 @@ class ModelResponse(BaseModel):
 class ModelListResponse(BaseModel):
     models: List[ModelResponse]
     total: int
+
+
+class ModelUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=64)
+    description: Optional[str] = None
+    public: Optional[bool] = None
