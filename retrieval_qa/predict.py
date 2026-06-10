@@ -2,12 +2,18 @@
 智能问答系统 — 推理/预测主入口
 
 支持三种模式：
-  1. 单次查询：    python predict.py -q "什么是机器学习"
-  2. FAQ 交互：    python predict.py -m faq
-  3. 对话交互：    python predict.py -m dialogue
+  1. 单次查询：    python retrieval_qa/predict.py -q "什么是机器学习"
+  2. FAQ 交互：    python retrieval_qa/predict.py -m faq
+  3. 对话交互：    python retrieval_qa/predict.py -m dialogue
 
 问答流程：
   用户输入 → 问题理解 → 知识检索 → 答案生成 → 输出
+
+首次运行自动构建索引，后续秒级加载。
+
+运行环境：
+  conda activate nlp
+  pip install -r retrieval_qa/requirements.txt
 """
 
 import sys
