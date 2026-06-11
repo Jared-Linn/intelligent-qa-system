@@ -39,7 +39,7 @@ class GenerativeInferenceEngine:
     """生成式推理引擎"""
 
     def __init__(self):
-        self.base_model_name = "Qwen/Qwen2.5-3B-Instruct"
+        self.base_model_name = r"E:\work\Claude code default\智能问答系统\checkpoints\model_cache"
         self._base_model = None
         self._tokenizer_base = None
         self._loaded = False
@@ -50,13 +50,28 @@ class GenerativeInferenceEngine:
             return
 
         import torch
+        import psutil
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        # 强制离线模式，避免尝试连接 HuggingFace
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["HF_HUB_OFFLINE"] = "1"
+
         print("[生成式] 加载基座模型:", self.base_model_name)
+
+        # 检查内存
+        mem = psutil.virtual_memory()
+        mem_gb = mem.available / 1024**3
+        print(f"[生成式] 可用内存: {mem_gb:.1f}GB")
+
+        if mem_gb < 14:
+            print(f"[生成式] 警告: 可用内存仅 {mem_gb:.1f}GB，模型需要约 12GB，可能触发 OOM")
+
         self._tokenizer_base = AutoTokenizer.from_pretrained(
             self.base_model_name,
             trust_remote_code=True,
             padding_side="left",
+            local_files_only=True,
         )
         if self._tokenizer_base.pad_token is None:
             self._tokenizer_base.pad_token = self._tokenizer_base.eos_token
@@ -68,11 +83,30 @@ class GenerativeInferenceEngine:
         if not has_gpu:
             print("[生成式] 未检测到 GPU，使用 CPU 推理（较慢）")
 
+        # 内存不足时尝试 8bit 量化
+        if not has_gpu and mem_gb < 16:
+            try:
+                print("[生成式] 内存不足，尝试 8bit 量化加载...")
+                self._base_model = AutoModelForCausalLM.from_pretrained(
+                    self.base_model_name,
+                    torch_dtype=torch.float32,
+                    device_map="cpu",
+                    load_in_8bit=True,
+                    trust_remote_code=True,
+                    local_files_only=True,
+                )
+                self._loaded = True
+                print("[生成式] 8bit 量化加载完成")
+                return
+            except Exception:
+                print("[生成式] 8bit 量化不可用，回退普通加载")
+
         self._base_model = AutoModelForCausalLM.from_pretrained(
             self.base_model_name,
             torch_dtype=dtype,
             device_map=device,
             trust_remote_code=True,
+            local_files_only=True,
         )
         self._loaded = True
         print("[生成式] 基座模型加载完成")

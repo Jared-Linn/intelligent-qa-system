@@ -1,0 +1,3 @@
+{"text": "<|im_start|>user\n你好<|im_end|>\n<|im_start|>assistant\n你好！有什么我可以帮助你的吗？<|im_end|>"}
+{"text": "<|im_start|>user\n今天天气怎么样？<|im_end|>\n<|im_start|>assistant\n抱歉，我无法实时查询天气，建议你查看天气预报应用。<|im_end|>"}
+{"text": "<|im_start|>user\n什么是机器学习？<|im_end|>\n<|im_start|>assistant\n机器学习是人工智能的一个分支，让计算机通过数据学习规律而不需要明确编程。<|im_end|>"}
